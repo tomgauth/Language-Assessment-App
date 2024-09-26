@@ -1,30 +1,24 @@
-from openai import OpenAI
+import openai
 import os
 from dotenv import load_dotenv
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-
-
-# Load environment variables from .env
+# Load environment variables
 load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Function to send transcription to ChatGPT and evaluate the naturalness
 def evaluate_naturalness(transcription):
-    # Define the prompt to instruct ChatGPT
     messages = [
-        {"role": "system", "content": "You are a language expert. You will evaluate text for its natural and native-like conversational qualities."},
-        {"role": "user", "content": f"Evaluate this text for naturalness and native-like quality: '{transcription}'. Provide a score from 0 to 100 and explain your evaluation."}
+        {"role": "system", "content": "You are a language expert evaluating conversational text."},
+        {"role": "user", "content": f"Evaluate this text for naturalness and native-like quality: '{transcription}'. Provide a score and feedback."}
     ]
-
-    # Send the prompt to the OpenAI API
+    
     try:
-        response = client.chat.completions.create(model="gpt-4",  # Or use 'gpt-3.5-turbo'
-        messages=messages,
-        temperature=0.5  # Adjust temperature for creativity vs. consistency
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Use 'gpt-3.5-turbo' if needed
+            messages=messages,
+            temperature=0.5
         )
-
-        # Extract the content from the response
-        feedback = response.choices[0].message.content
+        feedback = response['choices'][0]['message']['content']
         return feedback
 
     except openai.OpenAIError as e:
