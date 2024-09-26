@@ -14,6 +14,9 @@ st.write("""
     You can either upload an audio file to transcribe or input text directly for analysis.
 """)
 
+st.write("Use this app to record your voice for about one minute, then upload it here")
+st.link_button(label="record yourself", url="https://www.rev.com/onlinevoicerecorder")
+
 # Initialize session state for transcription if it's not already stored
 if 'transcription' not in st.session_state:
     st.session_state['transcription'] = ""
