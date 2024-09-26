@@ -1,53 +1,65 @@
 import streamlit as st
-from dotenv import load_dotenv
-from services.text_analysis import analyze_text  # Import the service
-from services.test_data import get_A2_sample_text   # Import the test sample text
-from services.nlp_analysis import analyze_lemmas_and_frequency  # Import the function from nlp_analysis.py
-from services.ai_analysis import evaluate_naturalness  # Import the new AI evaluation function
-import os
+from services.transcription import transcribe_audio  # Import the transcription service
+from services.nlp_analysis import analyze_lemmas_and_frequency  # Import existing functions
+from services.ai_analysis import evaluate_naturalness  # Import the AI evaluation function
+from services.test_data import get_A2_sample_text  # Import the sample test text
 
+# Page Title
+st.title("Language Proficiency Assessment App")
 
-default_text = get_A2_sample_text()
+# Explanation
+st.write("""
+    This app helps you assess your language proficiency through audio transcription and text analysis. 
+    You can either upload an audio file to transcribe or input text directly for analysis.
+""")
 
-# Load environment variables from .env file
-load_dotenv()
+# Initialize session state for transcription if it's not already stored
+if 'transcription' not in st.session_state:
+    st.session_state['transcription'] = ""
 
-# Get the OpenAI API key from the environment
-openai_api_key = os.getenv("OPENAI_API_KEY")
+# Audio Upload and Transcription
+audio_file = st.file_uploader("Upload an audio file", type=["mp3", "wav", "m4a"])
+transcribed_text = ""
 
-# Use the API key in your code
-print(f"Your OpenAI API key is: {openai_api_key}")
+# Default value for duration_in_minutes in case there's no audio
+duration_in_minutes = 1  # You can also allow the user to input this manually if needed
 
-if st.button("Click here if you're a pookie"):
-    st.title("Who is a pookie curiosa❤️🐹?")
+if audio_file:
+    # If audio is uploaded, display the Transcribe button
+    if st.button("Transcribe"):
+        st.write("Transcribing audio...")
+        transcription, audio_duration = transcribe_audio(audio_file)  # Get transcription and duration
+        st.session_state['transcription'] = transcription
+        duration_in_minutes = audio_duration / 60  # Convert duration to minutes
 
-st.write("This app will assess your French language skills.")
+# Text Input (modifiable or prefilled with transcribed text)
+if st.session_state['transcription']:
+    paragraph = st.text_area("Transcription:", value=st.session_state['transcription'], height=200)
+else:
+    paragraph = st.text_area("Enter a paragraph (up to 300 words):", height=200)
 
-# Streamlit app layout
-st.title("French Language Assessment - Text Analysis")
+# Analyze button (shown after audio or text input)
+if paragraph:
+    if st.button("Analyze"):
+        # Call the analysis functions
+        vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm = analyze_lemmas_and_frequency(
+            paragraph, duration_in_minutes)
 
-# Input for the user to input the duration in minutes
-duration_in_minutes = st.number_input("Enter the duration of speech (in minutes)", min_value=1.0, step=0.1)
+        st.write("## Analysis Report")
+        st.write(f"**Total Lemmas:** {total_lemmas}")
+        st.write(f"**Unique Lemmas:** {unique_lemmas}")
+        st.write(f"**Median Frequency of Words:** {median_frequency}")
+        st.write(f"**Fluency Score (WPM):** {fluency_score}%")
+        st.write(f"**Words Per Minute (WPM):** {wpm}")
 
-# Text input area for the user to input a paragraph (up to 300+ words)
-paragraph = st.text_area("Enter a paragraph (up to 300 words):",value=default_text, height=200)
-
-# Button to trigger the analysis
-if st.button("Analyze Text"):
-    # Check if the input is not empty
-    if paragraph:
-        # Call the function to analyze lemmas, frequency, and calculate fluency/vocabulary scores
-        total_lemmas, unique_lemmas, median_frequency, fluency_score, vocabulary_score = analyze_lemmas_and_frequency(paragraph, duration_in_minutes)
+        # AI Feedback
         feedback = evaluate_naturalness(paragraph)
-        # Display the results
-        st.write(f"Total number of lemmas: {total_lemmas}")
-        st.write(f"Number of unique lemmas: {unique_lemmas}")
-        st.write(f"Median frequency of words: {median_frequency}")
-        st.write(f"Fluency Score (Words Per Minute): {fluency_score}%")
-        st.write(f"Vocabulary Score (Median Word Frequency): {vocabulary_score}%")
-        st.write("AI's evaluation:")
-        st.write(feedback)
-    else:
-        st.warning("Please enter a paragraph before analyzing.")
+        st.write("## AI Feedback")
 
-
+        # Display the feedback in a visually distinct card
+        st.markdown(f"""
+        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 10px; margin-top: 10px;">
+            <h4>Feedback</h4>
+            <p>{feedback}</p>
+        </div>
+        """, unsafe_allow_html=True)
