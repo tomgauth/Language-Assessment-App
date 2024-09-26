@@ -1,8 +1,9 @@
 import streamlit as st
 from services.transcription import transcribe_audio  # Import the transcription service
 from services.nlp_analysis import analyze_lemmas_and_frequency  # Import existing functions
-from services.ai_analysis import evaluate_naturalness  # Import the AI evaluation function
-from services.test_data import get_A2_sample_text  # Import the sample test text
+from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication  # Import the AI evaluation functions
+from st_circular_progress import CircularProgress
+import openai
 
 # Page Title
 st.title("Language Proficiency Assessment App")
@@ -38,6 +39,92 @@ if st.session_state['transcription']:
 else:
     paragraph = st.text_area("Enter a paragraph (up to 300 words):", height=200)
 
+# Function to determine color dynamically based on score
+def get_color(score):
+    if score <= 10:
+        return "red"
+    elif score <= 30:
+        return "orange"
+    elif score <= 50:
+        return "yellow"
+    elif score <= 70:
+        return "lightgreen"
+    else:
+        return "green"
+
+
+# Function to display the circular progress charts in a single row
+def display_circular_progress(fluency_score, syntax_score, vocabulary_score, communication_score):
+    st.write("## Analysis Scores")
+
+    # Use Streamlit columns to display the circular progress charts in one row
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        my_fluency_progress = CircularProgress(
+            label="Fluency",
+            value=fluency_score,
+            key="fluency_progress",
+            size="medium",
+            color=get_color(fluency_score),
+            track_color="lightgray"
+        )
+        my_fluency_progress.st_circular_progress()
+
+    with col2:
+        my_syntax_progress = CircularProgress(
+            label="Syntax",
+            value=syntax_score,
+            key="syntax_progress",
+            size="medium",
+            color=get_color(syntax_score),
+            track_color="lightgray"
+        )
+        my_syntax_progress.st_circular_progress()
+
+    with col3:
+        my_vocabulary_progress = CircularProgress(
+            label="Vocabulary",
+            value=vocabulary_score,
+            key="vocabulary_progress",
+            size="medium",
+            color=get_color(vocabulary_score),
+            track_color="lightgray"
+        )
+        my_vocabulary_progress.st_circular_progress()
+
+    with col4:
+        my_communication_progress = CircularProgress(
+            label="Communication",
+            value=communication_score,
+            key="communication_progress",
+            size="medium",
+            color=get_color(communication_score),
+            track_color="lightgray"
+        )
+        my_communication_progress.st_circular_progress()
+
+
+# Function to display gathered data in a table
+def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm):
+    st.write("## Detailed Data Table")
+    
+    data = {
+        "Metric": ["Vocabulary Score", "Total Lemmas", "Unique Lemmas", "Median Frequency", "Fluency Score (WPM)", "Words per Minute"],
+        "Value": [vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm]
+    }
+    
+    st.table(data)
+    
+    # Paragraph explaining how the scores are calculated
+    st.write("""
+        **Explanation of the Metrics:**
+        - **Fluency**: The number of words spoken per minute (WPM), with higher WPM indicating better fluency.
+        - **Syntax**: Assessed by AI, this score reflects the coherence of sentence construction and use of connectors, with more complex and connected sentences earning higher scores.
+        - **Vocabulary**: This score is based on the ratio of unique lemmas to total lemmas and the median frequency of words. A more diverse vocabulary with rarer words increases the score.
+        - **Communication**: Evaluates the use of fillers, rephrasing, asking back questions, and the use of idioms or slang, making the speaker sound more natural in conversation.
+    """)
+
 # Analyze button (shown after audio or text input)
 if paragraph:
     if st.button("Analyze"):
@@ -45,21 +132,14 @@ if paragraph:
         vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm = analyze_lemmas_and_frequency(
             paragraph, duration_in_minutes)
 
-        st.write("## Analysis Report")
-        st.write(f"**Total Lemmas:** {total_lemmas}")
-        st.write(f"**Unique Lemmas:** {unique_lemmas}")
-        st.write(f"**Median Frequency of Words:** {median_frequency}")
-        st.write(f"**Fluency Score (WPM):** {fluency_score}%")
-        st.write(f"**Words Per Minute (WPM):** {wpm}")
+        # AI Syntax Feedback
+        syntax_score = evaluate_syntax(paragraph)
 
-        # AI Feedback
-        feedback = evaluate_naturalness(paragraph)
-        st.write("## AI Feedback")
+        # AI Communication Feedback
+        communication_score = evaluate_communication(paragraph)
 
-        # Display the feedback in a visually distinct card
-        st.markdown(f"""
-        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 10px; margin-top: 10px;">
-            <h4>Feedback</h4>
-            <p>{feedback}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Display the circular progress bars
+        display_circular_progress(fluency_score, int(syntax_score), vocabulary_score, int(communication_score))
+
+        # Display the gathered data in a table
+        display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm)
