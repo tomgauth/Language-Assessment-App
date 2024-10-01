@@ -1,6 +1,8 @@
 import openai
 import os
 from dotenv import load_dotenv
+import streamlit as st
+
 
 # Load environment variables
 load_dotenv()
@@ -8,75 +10,106 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 print(openai.api_key)
 
 
-
-def evaluate_syntax(transcription):
-    messages = [
-        {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
-        {"role": "user", "content": f"Evaluate the syntactic coherence of the following text and rate it from 0 to 100. You are looking at sentence construction, level of speech (long sentences with conjonctions and connectors make more sense): '{transcription}'. Only provide the score."}
-    ]
+def evaluate_score(prompts, transcription):
+    """
+    Evaluates a language score based on the provided prompts and transcription,
+    returning a number between 0 and 100.
     
+    Parameters:
+    - prompts: The prompt or system/user prompts to be evaluated.
+    - transcription: The text transcription to be evaluated.
+
+    Returns:
+    - score: A number between 0 and 100.
+    """
+
+    # Check if transcription is valid and print it for debugging
+    if not transcription:
+        st.write("Error: Transcription is empty or None.")
+        return 0
+    
+    # st.write(f"Debug: Received transcription: {transcription}")
+
+    # Inject the transcription into the prompts and print the result
+    for prompt in prompts:
+        if '{transcription}' in prompt['content']:
+            prompt['content'] = prompt['content'].format(transcription=transcription)
+            # st.write(f"Debug: Prompt after injecting transcription: {prompt['content']}")
+    
+    # Verify if prompts have been correctly formatted
+    # st.write(f"Debug: Final prompts passed to API: {prompts}")
+
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # Use 'gpt-3.5-turbo' if needed
-            messages=messages,
-            temperature=0.5
+        # Call the new OpenAI chat completion API
+        response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=prompts
         )
-        # Get the content of the response and try to convert it to an integer
-        syntax_score = response['choices'][0]['message']['content'].strip()
+        
+        # st.write(f"Debug: API response received: {response}")
+        
+        # Extract the content from the response
+        score = response.choices[0].message.content
+        # st.write(f"Debug: Score extracted from API response: {score}")
 
-        # Ensure the score is an integer between 0 and 100, otherwise return 0
-        syntax_score = int(syntax_score) if syntax_score.isdigit() and 0 <= int(syntax_score) <= 100 else 0
+        # Try converting to an integer and ensure it is between 0 and 100
+        try:
+            score = int(score)
+            if not 0 <= score <= 100:
+                st.write("Error: Score is not within the valid range (0-100). Setting it to 0.")
+                score = 0
+        except ValueError:
+            # st.write("Error: Could not convert score to an integer. Setting score to 0.")
+            score = 0
 
-        return syntax_score
+        # st.write(f"Debug: Score to send right before response: {score}, type is: {type(score)}")
+        return score
 
     except openai.OpenAIError as e:
-        return 0  # In case of API error, return 0 as a fallback
+        st.error(f"An error occurred while communicating with OpenAI: {str(e)}")
+        return 0
 
-def evaluate_communication(transcription):
-    messages = [
-        {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
-        {"role": "user", "content": f"""You are a language expert evaluating the conversational communication of a person learning a language. Please rate their communication skills from 0 to 100. Specifically, assess:
+# Define your prompt templates with placeholders for transcription
+syntax_score_template = [
+    {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
+    {"role": "user", "content": "Evaluate the syntactic coherence of the following text and rate it from 0 to 100. You are looking at sentence construction, level of speech (long sentences with conjunctions and connectors make more sense): '{transcription}'. Only provide the score."}
+]
 
-1. Use of fillers (e.g., "uh", "you know", "like"), which indicate natural speech.
+communication_score_template = [
+    {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
+    {"role": "user", "content": """You are a language expert evaluating the conversational communication of a person learning a language. Please rate their communication skills from 0 to 100. Specifically, assess:
+
+1. Use of fillers, which indicate natural speech.
 2. Ability to ask follow-up questions or ask for clarification, showing active engagement.
 3. Rephrasing of the question to ensure understanding.
 4. Use of slang, idioms, and natural-sounding expressions that are typical of native speakers.
 5. Overall ability to sound fluent and natural in a conversation.
 
 Evaluate these points and provide a single score from 0 to 100 based on how well they communicate. Only provide the score and no additional explanation. Here is the text: '{transcription}'."""}
-    ]
-    
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # Use 'gpt-3.5-turbo' if needed
-            messages=messages,
-            temperature=0.5
-        )
-        communication_score = response['choices'][0]['message']['content']
+]
 
-    
-        communication_score = int(communication_score) if communication_score.isdigit() and 0 <= int(communication_score) <= 100 else 0
-        return communication_score
-    
-    except openai.OpenAIError as e:
-        return 0  # In case of API error, return 0 as a fallback
-    
+naturalness_score_template = [
+    {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language. Your goal is to assess how naturally they speak the language, paying special attention to whether their language use resembles that of a native speaker in casual conversation."},
+    {"role": "user", "content": """Evaluate the naturalness of the following transcription, focusing on the following elements:
 
+1. **Use of idioms and natural-sounding expressions**: Does the speaker use idiomatic language or common phrases that native speakers often use?
+2. **Sentence construction**: Does the speaker use varied sentence structures, including short, informal, and sometimes incomplete sentences?
+3. **Use of fillers and hesitations**: Does the speaker include fillers (like "um", "uh", "you know") and natural pauses, which are typical in everyday conversation?
+4. **Flow and rhythm of speech**: Does the transcription read like fluid, conversational speech, even if it includes minor errors or hesitations?
+5. **Overall naturalness**: Does the speaker sound like a native speaker, even if there are small mistakes or hesitations? 
+
+Based on these criteria, rate the naturalness of the transcription from 0 to 100. Here is the transcription: '{transcription}'. Only provide the score."""}
+]
+
+
+def evaluate_syntax(transcription):
+    syntax_score = evaluate_score(syntax_score_template, transcription)
+    return syntax_score
+
+def evaluate_communication(transcription):
+    com_score = evaluate_score(communication_score_template, transcription)
+    return com_score
 
 def evaluate_naturalness(transcription):
-    messages = [
-        {"role": "system", "content": "You are a language expert evaluating conversational text."},
-        {"role": "user", "content": f"Evaluate this text for naturalness and native-like quality: '{transcription}'. Provide a score and feedback."}
-    ]
-    
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # Use 'gpt-3.5-turbo' if needed
-            messages=messages,
-            temperature=0.5
-        )
-        feedback = response['choices'][0]['message']['content']
-        return feedback
-
-    except openai.OpenAIError as e:
-        return f"An error occurred: {str(e)}"
+    naturalness_score = evaluate_score(naturalness_score_template, transcription)
+    return naturalness_score

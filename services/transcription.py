@@ -7,14 +7,36 @@ import dotenv
 import os
 
 
+def convert_audio_to_wav(audio_bytes):
+    try:
+        audio_bio = io.BytesIO(audio_bytes)
+        audio_bio.name = 'audio.wav'  # Assign a name to the in-memory file
+        return audio_bio
+    except Exception as e:
+        print(f"Error converting audio to WAV: {e}")
+        return None
+
 def get_audio_duration(audio_bytes):
-    # Use pydub to figure out the audio format
     try:
         audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
         duration_in_minutes = len(audio_segment) / (1000 * 60)  # Convert milliseconds to minutes
         return duration_in_minutes
     except Exception as e:
-        print(f"Error decoding audio: {e}")
+        print(f"Error calculating audio duration: {e}")
+        return 0.1  # Default duration if error occurs
+
+
+def transcribe_audio(openai_api_key, audio_bio, language=None):
+    try:
+        client = OpenAI(api_key=openai_api_key)
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_bio,
+            language=language
+        )
+        return transcript.text
+    except Exception as e:
+        print(f"Error transcribing audio: {e}")
         return None
 
 
@@ -29,51 +51,30 @@ def whisper_stt(openai_api_key=None, start_prompt="▶️ Start recording", stop
         st.session_state._last_speech_to_text_transcript = None
     if key and not key + '_output' in st.session_state:
         st.session_state[key + '_output'] = None
+
+    # Record audio using mic_recorder
     audio = mic_recorder(start_prompt=start_prompt, stop_prompt=stop_prompt, just_once=just_once,
                          use_container_width=use_container_width, key=key)
-    new_output = False
     if audio is None:
-        output = None, None
-    else:
-        id = audio['id']
-        new_output = (id > st.session_state._last_speech_to_text_transcript_id)
-        if new_output:
-            output = None
-            st.session_state._last_speech_to_text_transcript_id = id
-            audio_bio = io.BytesIO(audio['bytes'])
-            audio_bio.name = 'audio.mp3'
-            audio_bytes = audio["bytes"]
-             # Try calculating the duration
-            try:
-                duration_in_minutes = get_audio_duration(audio_bytes)
-            except Exception as e:
-                print(f"Error calculating duration: {e}")
-
-            print(f"Duration in minutes: {duration_in_minutes}")
-
-            success = False
-            err = 0
-            while not success and err < 3:  # Retry up to 3 times in case of OpenAI server error.
-                try:
-                    transcript = st.session_state.openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_bio,
-                        language=language
-                    )
-                except Exception as e:
-                    print(str(e))  # log the exception in the terminal
-                    err += 1
-                else:
-                    success = True
-                    output = transcript.text
-                    st.session_state._last_speech_to_text_transcript = output
-        elif not just_once:
-            output = st.session_state._last_speech_to_text_transcript
+        return None, 0.1  # Return a default duration if no audio recorded
+    
+    audio_bytes = audio["bytes"]
+    
+    # Convert audio to WAV format
+    audio_bio = convert_audio_to_wav(audio_bytes)
+    
+    if audio_bio:
+        # Measure audio duration
+        duration_in_minutes = get_audio_duration(audio_bytes)
+        
+        # Transcribe audio using Whisper
+        transcription = transcribe_audio(openai_api_key, audio_bio, language)
+        
+        # Store the transcription in session state
+        if transcription:
+            st.session_state['_last_speech_to_text_transcript'] = transcription
+            return transcription, duration_in_minutes
         else:
-            output = None
-
-    if key:
-        st.session_state[key + '_output'] = output
-    if new_output and callback:
-        callback(*args, **(kwargs or {}))
-    return output, duration_in_minutes
+            return None, duration_in_minutes
+    else:
+        return None, 0.1  # Return a default duration if conversion fails

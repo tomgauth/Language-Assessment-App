@@ -17,8 +17,19 @@ def calculate_vocabulary_score(unique_lemmas, total_lemmas, median_frequency):
     score = (unique_lemma_ratio + median_frequency_score) / 2 * 100
     return round(score)
 
-# Function to analyze lemmas, frequency, and calculate scores
+
 def analyze_lemmas_and_frequency(paragraph, duration_in_minutes):
+    """
+    Analyzes the lemmas and word frequency of a paragraph and calculates the fluency, vocabulary scores, and WPM.
+
+    Parameters:
+    - paragraph: The input text to be analyzed.
+    - duration_in_minutes: The duration of the speech in minutes.
+
+    Returns:
+    - analysis_result: A dictionary containing the total lemmas, unique lemmas, median frequency, fluency score, vocabulary score, and WPM.
+    """
+
     doc = nlp(paragraph)
     lemmas = [token.lemma_ for token in doc if token.is_alpha]
 
@@ -30,10 +41,20 @@ def analyze_lemmas_and_frequency(paragraph, duration_in_minutes):
 
     # Calculate words per minute (WPM)
     total_words = len(lemmas)
-    wpm = total_words / duration_in_minutes
+    wpm = total_words / duration_in_minutes if duration_in_minutes > 0 else 0
 
     # Calculate Scores
     fluency_score = calculate_fluency_score(wpm)
     vocabulary_score = calculate_vocabulary_score(unique_lemmas, total_lemmas, median_frequency)
 
-    return total_lemmas, unique_lemmas, median_frequency, fluency_score, vocabulary_score, wpm
+    # Create a dictionary to return all relevant values
+    analysis_result = {
+        'total_lemmas': total_lemmas,
+        'unique_lemmas': unique_lemmas,
+        'median_frequency': median_frequency,
+        'fluency_score': fluency_score,
+        'vocabulary_score': vocabulary_score,
+        'wpm': wpm
+    }
+
+    return analysis_result
