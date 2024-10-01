@@ -1,46 +1,26 @@
 import streamlit as st
-from services.transcription import transcribe_audio  # Import the transcription service
+from services.audio_service import process_audio
+from services.transcription import whisper_stt  # Import the transcription service
 from services.nlp_analysis import analyze_lemmas_and_frequency  # Import existing functions
 from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication  # Import the AI evaluation functions
 from st_circular_progress import CircularProgress
 import openai
+from streamlit_mic_recorder import mic_recorder
+from io import BytesIO
+
+
 
 # Page Title
 st.title("Language Proficiency Assessment App")
 
-# Explanation
-st.write("""
-    This app helps you assess your language proficiency through audio transcription and text analysis. 
-    You can either upload an audio file to transcribe or input text directly for analysis.
-""")
+duration_in_minutes = 1 # default, to change later
+st.session_state['transcription'] = ""
 
-st.write("Use this app to record your voice for about one minute, then upload it here")
-st.link_button(label="record yourself", url="https://www.rev.com/onlinevoicerecorder")
+text = whisper_stt(language = 'en')  # If you don't pass an API key, the function will attempt to load a .env file in the current directory and retrieve it as an environment variable : 'OPENAI_API_KEY'.
+if text:
+    st.write(text)
+    st.session_state['transcription'] = text
 
-# Initialize session state for transcription if it's not already stored
-if 'transcription' not in st.session_state:
-    st.session_state['transcription'] = ""
-
-# Audio Upload and Transcription
-audio_file = st.file_uploader("Upload an audio file", type=["mp3", "wav", "m4a"])
-transcribed_text = ""
-
-# Default value for duration_in_minutes in case there's no audio
-duration_in_minutes = 1  # You can also allow the user to input this manually if needed
-
-if audio_file:
-    # If audio is uploaded, display the Transcribe button
-    if st.button("Transcribe"):
-        st.write("Transcribing audio...")
-        transcription, audio_duration = transcribe_audio(audio_file)  # Get transcription and duration
-        st.session_state['transcription'] = transcription
-        duration_in_minutes = audio_duration / 60  # Convert duration to minutes
-
-# Text Input (modifiable or prefilled with transcribed text)
-if st.session_state['transcription']:
-    paragraph = st.text_area("Transcription:", value=st.session_state['transcription'], height=200)
-else:
-    paragraph = st.text_area("Enter a paragraph (up to 300 words):", height=200)
 
 # Function to determine color dynamically based on score
 def get_color(score):
@@ -129,17 +109,18 @@ def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_fre
     """)
 
 # Analyze button (shown after audio or text input)
-if paragraph:
+if st.session_state['transcription']:
+    transcription = st.session_state['transcription']
     if st.button("Analyze"):
         # Call the analysis functions
         vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm = analyze_lemmas_and_frequency(
-            paragraph, duration_in_minutes)
+            transcription, duration_in_minutes)
 
         # AI Syntax Feedback
-        syntax_score = evaluate_syntax(paragraph)
+        syntax_score = evaluate_syntax(transcription)
 
         # AI Communication Feedback
-        communication_score = evaluate_communication(paragraph)
+        communication_score = evaluate_communication(transcription)
 
         # Display the circular progress bars
         display_circular_progress(fluency_score, int(syntax_score), vocabulary_score, int(communication_score))
