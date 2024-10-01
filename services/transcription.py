@@ -1,12 +1,24 @@
 from streamlit_mic_recorder import mic_recorder
 import streamlit as st
 import io
+from pydub import AudioSegment
 from openai import OpenAI
 import dotenv
 import os
 
 
-def whisper_stt(openai_api_key=None, start_prompt="Start recording", stop_prompt="Stop recording", just_once=False,
+def get_audio_duration(audio_bytes):
+    # Use pydub to figure out the audio format
+    try:
+        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        duration_in_minutes = len(audio_segment) / (1000 * 60)  # Convert milliseconds to minutes
+        return duration_in_minutes
+    except Exception as e:
+        print(f"Error decoding audio: {e}")
+        return None
+
+
+def whisper_stt(openai_api_key=None, start_prompt="▶️ Start recording", stop_prompt="⏹️ Stop recording", just_once=False,
                use_container_width=False, language=None, callback=None, args=(), kwargs=None, key=None):
     if not 'openai_client' in st.session_state:
         dotenv.load_dotenv()
@@ -21,7 +33,7 @@ def whisper_stt(openai_api_key=None, start_prompt="Start recording", stop_prompt
                          use_container_width=use_container_width, key=key)
     new_output = False
     if audio is None:
-        output = None
+        output = None, None
     else:
         id = audio['id']
         new_output = (id > st.session_state._last_speech_to_text_transcript_id)
@@ -30,6 +42,15 @@ def whisper_stt(openai_api_key=None, start_prompt="Start recording", stop_prompt
             st.session_state._last_speech_to_text_transcript_id = id
             audio_bio = io.BytesIO(audio['bytes'])
             audio_bio.name = 'audio.mp3'
+            audio_bytes = audio["bytes"]
+             # Try calculating the duration
+            try:
+                duration_in_minutes = get_audio_duration(audio_bytes)
+            except Exception as e:
+                print(f"Error calculating duration: {e}")
+
+            print(f"Duration in minutes: {duration_in_minutes}")
+
             success = False
             err = 0
             while not success and err < 3:  # Retry up to 3 times in case of OpenAI server error.
@@ -55,4 +76,4 @@ def whisper_stt(openai_api_key=None, start_prompt="Start recording", stop_prompt
         st.session_state[key + '_output'] = output
     if new_output and callback:
         callback(*args, **(kwargs or {}))
-    return output
+    return output, duration_in_minutes
