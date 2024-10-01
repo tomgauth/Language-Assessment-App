@@ -4,6 +4,7 @@ from services.transcription import whisper_stt  # Import the transcription servi
 from services.nlp_analysis import analyze_lemmas_and_frequency  # Import existing functions
 from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication  # Import the AI evaluation functions
 from services.coda_db import get_audio_prompt_from_coda
+from services.export_csv import export_results_to_csv
 from st_circular_progress import CircularProgress
 import openai
 from streamlit_mic_recorder import mic_recorder
@@ -23,6 +24,7 @@ if 'duration_in_minutes' not in st.session_state:
 # Step 1: User enters a code
 st.title("Audio Prompt Response App")
 code = st.text_input("Enter the code for your audio prompt:")
+st.write("Use code TEST to test the app")
 
 if code:
     # Step 2: Fetch and play the audio prompt
@@ -52,24 +54,7 @@ if st.session_state['transcription']:
 if st.session_state['duration_in_minutes']:
     st.write(f"Duration in minutes: {st.session_state['duration_in_minutes']}")
 
-# Step 5: Analyze the transcription when the "Analyze" button is clicked
-if st.session_state['transcription'] and st.button("Analyze"):
-    transcription = st.session_state['transcription']
-    duration_in_minutes = st.session_state['duration_in_minutes']
 
-    # Perform text analysis and scoring
-    vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm = analyze_lemmas_and_frequency(
-        transcription, duration_in_minutes
-    )
-
-    syntax_score = evaluate_syntax(transcription)
-    communication_score = evaluate_communication(transcription)
-
-    # Display analysis results with circular progress bars
-    display_circular_progress(fluency_score, int(syntax_score), vocabulary_score, int(communication_score))
-
-    # Display detailed data table
-    display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm)
 
 # Function to determine color dynamically based on score
 def get_color(score):
@@ -141,9 +126,17 @@ def display_circular_progress(fluency_score, syntax_score, vocabulary_score, com
 def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm):
     st.write("## Detailed Data Table")
     
+    # Round all numeric values to integers
     data = {
         "Metric": ["Vocabulary Score", "Total Lemmas", "Unique Lemmas", "Median Frequency", "Fluency Score (WPM)", "Words per Minute"],
-        "Value": [vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm]
+        "Value": [
+            round(vocabulary_score), 
+            round(total_lemmas), 
+            round(unique_lemmas), 
+            round(median_frequency), 
+            round(fluency_score), 
+            round(wpm)
+        ]
     }
     
     st.table(data)
@@ -161,18 +154,35 @@ def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_fre
 if st.session_state['transcription']:
     transcription = st.session_state['transcription']
     if st.button("Analyze"):
-        # Call the analysis functions
-        vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm = analyze_lemmas_and_frequency(
+        # Appeler la fonction d'analyse qui renvoie un dictionnaire
+        analysis_result = analyze_lemmas_and_frequency(
             transcription, duration_in_minutes=st.session_state['duration_in_minutes'])
+
+        # Unpacker les valeurs du dictionnaire
+        total_lemmas = analysis_result['total_lemmas']
+        unique_lemmas = analysis_result['unique_lemmas']
+        median_frequency = analysis_result['median_frequency']
+        fluency_score = analysis_result['fluency_score']
+        vocabulary_score = analysis_result['vocabulary_score']
+        wpm = analysis_result['wpm']
 
         # AI Syntax Feedback
         syntax_score = evaluate_syntax(transcription)
+        st.write(f"Syntax score: {syntax_score}")
 
         # AI Communication Feedback
         communication_score = evaluate_communication(transcription)
+        st.write(f"▶️ Communication score: {communication_score}")
 
         # Display the circular progress bars
         display_circular_progress(fluency_score, int(syntax_score), vocabulary_score, int(communication_score))
 
         # Display the gathered data in a table
         display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm)
+
+        # Export results as CSV, including timestamp
+        export_results_to_csv(
+            transcription, vocabulary_score, total_lemmas, unique_lemmas, median_frequency, 
+            fluency_score, wpm, syntax_score, communication_score, 
+            st.session_state['prompt_text'], code, audio_url
+        )
