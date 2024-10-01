@@ -21,11 +21,16 @@ def evaluate_syntax(transcription):
             messages=messages,
             temperature=0.5
         )
-        syntax_score = response['choices'][0]['message']['content']
+        # Get the content of the response and try to convert it to an integer
+        syntax_score = response['choices'][0]['message']['content'].strip()
+
+        # Ensure the score is an integer between 0 and 100, otherwise return 0
+        syntax_score = int(syntax_score) if syntax_score.isdigit() and 0 <= int(syntax_score) <= 100 else 0
+
         return syntax_score
 
     except openai.OpenAIError as e:
-        return f"An error occurred: {str(e)}"
+        return 0  # In case of API error, return 0 as a fallback
 
 def evaluate_communication(transcription):
     messages = [
@@ -47,11 +52,14 @@ Evaluate these points and provide a single score from 0 to 100 based on how well
             messages=messages,
             temperature=0.5
         )
-        communication = response['choices'][0]['message']['content']
-        return communication
+        communication_score = response['choices'][0]['message']['content']
 
+    
+        communication_score = int(communication_score) if communication_score.isdigit() and 0 <= int(communication_score) <= 100 else 0
+        return communication_score
+    
     except openai.OpenAIError as e:
-        return f"An error occurred: {str(e)}"
+        return 0  # In case of API error, return 0 as a fallback
     
 
 
