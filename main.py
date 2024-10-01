@@ -133,7 +133,7 @@ def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_fre
             round(vocabulary_score), 
             round(total_lemmas), 
             round(unique_lemmas), 
-            round(median_frequency), 
+            median_frequency, 
             round(fluency_score), 
             round(wpm)
         ]
