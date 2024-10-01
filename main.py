@@ -3,24 +3,73 @@ from services.audio_service import process_audio
 from services.transcription import whisper_stt  # Import the transcription service
 from services.nlp_analysis import analyze_lemmas_and_frequency  # Import existing functions
 from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication  # Import the AI evaluation functions
+from services.coda_db import get_audio_prompt_from_coda
 from st_circular_progress import CircularProgress
 import openai
 from streamlit_mic_recorder import mic_recorder
 from io import BytesIO
+import io
+from pydub import AudioSegment
 
 
+# Step 1: Initialize session state variables
+if 'transcription' not in st.session_state:
+    st.session_state['transcription'] = ""
+if 'prompt_text' not in st.session_state:
+    st.session_state['prompt_text'] = ""
+if 'duration_in_minutes' not in st.session_state:
+    st.session_state['duration_in_minutes'] = 0.1  # Default value
 
-# Page Title
-st.title("Language Proficiency Assessment App")
+# Step 1: User enters a code
+st.title("Audio Prompt Response App")
+code = st.text_input("Enter the code for your audio prompt:")
 
-duration_in_minutes = 1 # default, to change later
-st.session_state['transcription'] = ""
+if code:
+    # Step 2: Fetch and play the audio prompt
+    audio_url, prompt_text = get_audio_prompt_from_coda(code)
+    st.session_state['prompt_text'] = prompt_text
 
-text = whisper_stt(language = 'en')  # If you don't pass an API key, the function will attempt to load a .env file in the current directory and retrieve it as an environment variable : 'OPENAI_API_KEY'.
-if text:
-    st.write(text)
-    st.session_state['transcription'] = text
+    if audio_url:
+        st.write("Here is your audio prompt (You can only play it once):")
+        st.audio(audio_url, format="audio/wav")        
+        # Allow the user to start recording after the audio is played
+        transcription, duration_in_minutes = whisper_stt()
 
+        if transcription:
+            st.session_state['transcription'] = transcription
+            st.session_state['duration_in_minutes'] = duration_in_minutes
+        else:
+            st.write("No audio prompt found for this code.")
+                
+    else:
+        st.write("No audio prompt found for this code.")
+
+# Step 4: Display the transcription and duration (if available)
+if st.session_state['transcription']:
+    st.write("Transcription:")
+    st.write(st.session_state['transcription'])
+
+if st.session_state['duration_in_minutes']:
+    st.write(f"Duration in minutes: {st.session_state['duration_in_minutes']}")
+
+# Step 5: Analyze the transcription when the "Analyze" button is clicked
+if st.session_state['transcription'] and st.button("Analyze"):
+    transcription = st.session_state['transcription']
+    duration_in_minutes = st.session_state['duration_in_minutes']
+
+    # Perform text analysis and scoring
+    vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm = analyze_lemmas_and_frequency(
+        transcription, duration_in_minutes
+    )
+
+    syntax_score = evaluate_syntax(transcription)
+    communication_score = evaluate_communication(transcription)
+
+    # Display analysis results with circular progress bars
+    display_circular_progress(fluency_score, int(syntax_score), vocabulary_score, int(communication_score))
+
+    # Display detailed data table
+    display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm)
 
 # Function to determine color dynamically based on score
 def get_color(score):
@@ -114,7 +163,7 @@ if st.session_state['transcription']:
     if st.button("Analyze"):
         # Call the analysis functions
         vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm = analyze_lemmas_and_frequency(
-            transcription, duration_in_minutes)
+            transcription, duration_in_minutes=st.session_state['duration_in_minutes'])
 
         # AI Syntax Feedback
         syntax_score = evaluate_syntax(transcription)
