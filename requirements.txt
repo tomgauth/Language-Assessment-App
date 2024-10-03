@@ -47,6 +47,7 @@ fastjsonschema==2.20.0
 filelock==3.13.1
 flatbuffers==24.3.25
 fonttools==4.53.1
+fpdf==1.7.2
 fqdn==1.5.1
 fr-core-news-md @ https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.7.0/fr_core_news_md-3.7.0-py3-none-any.whl#sha256=f6a4fa799b1daf2a635fe55a7de6b344379dc542d54d4c490113f0bc94bed4b8
 frozenlist==1.4.1
