@@ -1,19 +1,31 @@
 import streamlit as st
-from services.audio_service import process_audio
-from services.transcription import whisper_stt  # Import the transcription service
-from services.nlp_analysis import analyze_lemmas_and_frequency  # Import existing functions
-from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication  # Import the AI evaluation functions
+from services.transcription import whisper_stt
+from services.nlp_analysis import analyze_lemmas_and_frequency
+from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication
 from services.coda_db import get_audio_prompt_from_coda, check_user_in_coda, save_results_to_coda
-from services.export_csv import export_results_to_csv
+from services.export_pdf import export_results_to_pdf
 from st_circular_progress import CircularProgress
-import openai
-from streamlit_mic_recorder import mic_recorder
-from io import BytesIO
 import io
-from pydub import AudioSegment
 
 
-st.write("hzeofihzeof")
+
+st.title("Fluency Analyser")
+
+st.write("""
+1️⃣ **Enter your username** to get started.
+
+2️⃣ **Input the code** given by your teacher.
+
+🎧 You’ll hear an **audio prompt** – a question or something to discuss. Listen carefully because you’ll only hear it once!
+
+🎤 Press the **recording button** and respond to the prompt. Try to speak fast and naturally, as if you're in a real-life conversation.
+
+🗣️ The app will **analyze your speech** based on how many words you use, the complexity of your sentences, and your overall communication skills.
+
+📊 Once done, your results will be **saved** for your teacher to track your progress over time.
+
+❓ Have questions? Feel free to contact me at **tom@hackfrenchwithtom.com**. 😊
+""")
 
 # Step 1: Initialize session state variables
 if 'transcription' not in st.session_state:
@@ -22,41 +34,94 @@ if 'prompt_text' not in st.session_state:
     st.session_state['prompt_text'] = ""
 if 'duration_in_minutes' not in st.session_state:
     st.session_state['duration_in_minutes'] = 0.1  # Default value
+if 'prompt_code' not in st.session_state:
+    st.session_state['prompt_code'] = ""
 
-# Step 1: User enters a code
-st.title("Audio Prompt Response App")
-code = st.text_input("Enter the code for your audio prompt:")
-st.write("Use code TEST to test the app")
-
-if code:
-    # Step 2: Fetch and play the audio prompt
-    audio_url, prompt_text = get_audio_prompt_from_coda(code)
-    st.session_state['prompt_text'] = prompt_text
-
-    if audio_url:
-        st.write("Here is your audio prompt (You can only play it once):")
-        st.audio(audio_url, format="audio/wav")        
-        # Allow the user to start recording after the audio is played
-        transcription, duration_in_minutes = whisper_stt()
-
-        if transcription:
-            st.session_state['transcription'] = transcription
-            st.session_state['duration_in_minutes'] = duration_in_minutes
+# Step 1: Validate User and Audio Code
+def user_and_code_input():
+    # Get the username and code
+    username = st.text_input("Enter your username: (enter 'test', to try the app)")
+    prompt_code = st.text_input("Enter the prompt code for your audio prompt:   (enter 'TEST' to try the app with a French prompt)")
+    st.session_state['prompt_code'] = prompt_code
+    
+    # Check if both username and code are provided
+    if username and prompt_code:
+        # Validate username in Coda
+        user_exists = check_user_in_coda(username)
+        if not user_exists:
+            st.error("Username not found. Please register.")
+            return None, None, None
+        
+        # Validate the audio prompt_code
+        audio_url, prompt_text = get_audio_prompt_from_coda(prompt_code)
+        if audio_url:
+            return username, prompt_code, prompt_text  # Return valid username and prompt_code
         else:
-            st.write("No audio prompt found for this code.")
-                
+            st.error("Invalid audio prompt_code. Please try again.")
+            return None, None, None
+    
+    # Return None if either username or prompt_code is missing
+    return None, None, None
+
+# Step 2: Fetch Audio and Display
+def fetch_and_display_audio(code):
+    audio_url, prompt_text = get_audio_prompt_from_coda(code)
+    if audio_url:
+        st.session_state['prompt_text'] = prompt_text
+        st.audio(audio_url, format="audio/wav")
+        return audio_url, prompt_text
     else:
-        st.write("No audio prompt found for this code.")
+        st.error("Invalid code. No audio prompt found.")
+        return False
 
-# Step 4: Display the transcription and duration (if available)
-if st.session_state['transcription']:
-    st.write("Transcription:")
-    st.write(st.session_state['transcription'])
+# Step 3: Handle Transcription and Analysis
+def handle_transcription_and_analysis(username):
+    # Once the audio is played, allow the user to record their response
+    transcription, duration_in_minutes = whisper_stt()
 
-if st.session_state['duration_in_minutes']:
-    st.write(f"Duration in minutes: {st.session_state['duration_in_minutes']}")
+    if transcription:
+        # Store transcription and duration in session state
+        st.session_state['transcription'] = transcription
+        st.session_state['duration_in_minutes'] = duration_in_minutes
+        
+        # Perform Analysis
+        st.write("Transcription:")
+        st.write(st.session_state['transcription'])
+        st.write(st.session_state['duration_in_minutes'])
 
+        # Step 4: Perform analysis and display results
+        analysis_result = analyze_lemmas_and_frequency(
+            transcription, duration_in_minutes=st.session_state['duration_in_minutes'])
+        
 
+        total_lemmas = analysis_result['total_lemmas']
+        unique_lemmas = analysis_result['unique_lemmas']
+        median_frequency = analysis_result['median_frequency']
+        fluency_score = analysis_result['fluency_score']
+        vocabulary_score = analysis_result['vocabulary_score']
+        wpm = analysis_result['wpm']
+        prompt_code = st.session_state['prompt_code']
+
+        # AI Feedback
+        syntax_score = evaluate_syntax(transcription)
+        communication_score = evaluate_communication(transcription)
+
+        # Save Results
+        save_results_to_coda(
+            username, prompt_code, transcription, fluency_score, vocabulary_score, 
+            syntax_score, communication_score, total_lemmas, unique_lemmas, median_frequency, wpm
+        )
+        st.success("Results saved successfully on the app")
+
+        # Display results
+        display_circular_progress(fluency_score, int(syntax_score), vocabulary_score, int(communication_score))
+        display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm)
+        
+        export_results_to_pdf(username, transcription, vocabulary_score, total_lemmas, unique_lemmas, median_frequency, 
+                          fluency_score, wpm, syntax_score, communication_score, st.session_state['prompt_text'], prompt_code)
+
+#    else:
+#        st.error("Transcription failed. Please try again.")
 
 # Function to determine color dynamically based on score
 def get_color(score):
@@ -123,7 +188,6 @@ def display_circular_progress(fluency_score, syntax_score, vocabulary_score, com
         )
         my_communication_progress.st_circular_progress()
 
-
 # Function to display gathered data in a table
 def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm):
     st.write("## Detailed Data Table")
@@ -140,72 +204,20 @@ def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_fre
             round(wpm)
         ]
     }
-    
     st.table(data)
+
+
+def main():
+    # Step 1: Validate User and Audio Code
+    username, prompt_code, prompt_text = user_and_code_input()
     
-    # Paragraph explaining how the scores are calculated
-    st.write("""
-        **Explanation of the Metrics:**
-        - **Fluency**: The number of words spoken per minute (WPM), with higher WPM indicating better fluency.
-        - **Syntax**: Assessed by AI, this score reflects the coherence of sentence construction and use of connectors, with more complex and connected sentences earning higher scores.
-        - **Vocabulary**: This score is based on the ratio of unique lemmas to total lemmas and the median frequency of words. A more diverse vocabulary with rarer words increases the score.
-        - **Communication**: Evaluates the use of fillers, rephrasing, asking back questions, and the use of idioms or slang, making the speaker sound more natural in conversation.
-    """)
+    if username and prompt_code:
+        # Step 2: Fetch and display the audio prompt
+        if fetch_and_display_audio(prompt_code):
+            st.write("Please listen to the audio and then start recording your response.")
+            st.session_state['prompt_text'] = prompt_text
+            # Step 3: Handle Transcription and Analysis
+            handle_transcription_and_analysis(username)
 
-# Analyze button (shown after audio or text input)
-if st.session_state['transcription']:
-    transcription = st.session_state['transcription']
-    if st.button("Analyze"):
-        # Appeler la fonction d'analyse qui renvoie un dictionnaire
-        analysis_result = analyze_lemmas_and_frequency(
-            transcription, duration_in_minutes=st.session_state['duration_in_minutes'])
-
-        # Unpacker les valeurs du dictionnaire
-        total_lemmas = analysis_result['total_lemmas']
-        unique_lemmas = analysis_result['unique_lemmas']
-        median_frequency = analysis_result['median_frequency']
-        fluency_score = analysis_result['fluency_score']
-        vocabulary_score = analysis_result['vocabulary_score']
-        wpm = analysis_result['wpm']
-
-        # AI Syntax Feedback
-        syntax_score = evaluate_syntax(transcription)
-        st.write(f"Syntax score: {syntax_score}")
-
-        # AI Communication Feedback
-        communication_score = evaluate_communication(transcription)
-        st.write(f"▶️ Communication score: {communication_score}")
-
-        # Display the circular progress bars
-        display_circular_progress(fluency_score, int(syntax_score), vocabulary_score, int(communication_score))
-
-        # Display the gathered data in a table
-        display_data_table(vocabulary_score, total_lemmas, unique_lemmas, median_frequency, fluency_score, wpm)
-
-        # Export results as CSV, including timestamp
-        export_results_to_csv(
-            transcription, vocabulary_score, total_lemmas, unique_lemmas, median_frequency, 
-            fluency_score, wpm, syntax_score, communication_score, 
-            st.session_state['prompt_text'], code, audio_url
-        )
-
-        # Frontend: Add input field for username
-username = st.text_input("Enter your username to save results:")
-
-if username:
-    # Check if the user exists in the Coda 'Users' table
-    user_exists = check_user_in_coda(username)
-    
-    if user_exists:
-        if st.button("Save Results"):
-            # Assume these are stored in session state after analysis
-            transcription = st.session_state['transcription']
-            vocabulary_score = st.session_state['vocabulary_score']
-            fluency_score = st.session_state['fluency_score']             
-            syntax_score = st.session_state['syntax_score']
-            communication_score = st.session_state['communication_score']
-            
-            # Save the results to Coda
-            save_results_to_coda(username, transcription, fluency_score, vocabulary_score, syntax_score, communication_score)
-    else:
-        st.error("User not found. Please register before saving results.")
+if __name__ == "__main__":
+    main()
