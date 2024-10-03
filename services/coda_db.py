@@ -1,6 +1,14 @@
 import streamlit as st
 import pandas as pd
 from codaio import Coda, Table, Document, Cell
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Retrieve the Coda API key
+CODA_API_KEY = os.getenv("CODA_API_KEY")
 
 # Coda API credentials
 CODA_API_KEY = "d3068a73-dcbf-4dc1-949c-7b8c733d76e6"
@@ -9,6 +17,8 @@ TABLE_ID = 'grid-vBrJKADk0W'
 
 # Initialize Coda client
 # TODO - change the api key to the environment
+
+
 coda = Coda(CODA_API_KEY)
 
 # Initialize Coda client and document
