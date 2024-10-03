@@ -5,13 +5,14 @@ from datetime import datetime
 
 
 
-def export_results_to_csv(transcription, vocabulary_score, total_lemmas, unique_lemmas, median_frequency, 
+def export_results_to_csv(username, transcription, vocabulary_score, total_lemmas, unique_lemmas, median_frequency, 
                           fluency_score, wpm, syntax_score, communication_score, prompt_text, code, audio_url):
     # Generate the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     # Create a dictionary to store the data
     results_data = {
+        "User Name": [username],
         "Timestamp": [timestamp],  # Add the timestamp
         "Question Code": [code],
         "Prompt Text": [prompt_text],
