@@ -3,7 +3,7 @@ from services.audio_service import process_audio
 from services.transcription import whisper_stt  # Import the transcription service
 from services.nlp_analysis import analyze_lemmas_and_frequency  # Import existing functions
 from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication  # Import the AI evaluation functions
-from services.coda_db import get_audio_prompt_from_coda
+from services.coda_db import get_audio_prompt_from_coda, check_user_in_coda, save_results_to_coda
 from services.export_csv import export_results_to_csv
 from st_circular_progress import CircularProgress
 import openai
@@ -12,6 +12,8 @@ from io import BytesIO
 import io
 from pydub import AudioSegment
 
+
+st.write("hzeofihzeof")
 
 # Step 1: Initialize session state variables
 if 'transcription' not in st.session_state:
@@ -186,3 +188,24 @@ if st.session_state['transcription']:
             fluency_score, wpm, syntax_score, communication_score, 
             st.session_state['prompt_text'], code, audio_url
         )
+
+        # Frontend: Add input field for username
+username = st.text_input("Enter your username to save results:")
+
+if username:
+    # Check if the user exists in the Coda 'Users' table
+    user_exists = check_user_in_coda(username)
+    
+    if user_exists:
+        if st.button("Save Results"):
+            # Assume these are stored in session state after analysis
+            transcription = st.session_state['transcription']
+            vocabulary_score = st.session_state['vocabulary_score']
+            fluency_score = st.session_state['fluency_score']             
+            syntax_score = st.session_state['syntax_score']
+            communication_score = st.session_state['communication_score']
+            
+            # Save the results to Coda
+            save_results_to_coda(username, transcription, fluency_score, vocabulary_score, syntax_score, communication_score)
+    else:
+        st.error("User not found. Please register before saving results.")

@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from codaio import Coda, Table, Document
+from codaio import Coda, Table, Document, Cell
 
 # Coda API credentials
 CODA_API_KEY = "d3068a73-dcbf-4dc1-949c-7b8c733d76e6"
@@ -19,6 +19,40 @@ table = doc.get_table(TABLE_ID)
 
 # Step 3: Convert the table to a pandas DataFrame
 df = pd.DataFrame(table.to_dict())
+
+# Function to check if a user exists in the 'Users' table
+def check_user_in_coda(username):
+    users_table = doc.get_table('Users')  # Assuming 'Users' is the table name
+    df = pd.DataFrame(users_table.to_dict())
+    matching_row = df[df['Username'] == username]
+    return not matching_row.empty
+
+
+# Function to save test results to Coda
+def save_results_to_coda(username, prompt_code, transcription, fluency_score, vocabulary_score, 
+            syntax_score, communication_score, total_lemmas, unique_lemmas, median_frequency, wpm):
+    
+    # Fetch the results table
+    test_sessions_table = doc.get_table('TestSessions')  # Make sure the table ID is correct
+    
+    # Define the cells with corresponding column IDs and values
+    cells = [
+        Cell(column='Username', value_storage=username),
+        Cell(column='Prompt Code', value_storage=prompt_code),
+        Cell(column='Test Date', value_storage=pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')),
+        Cell(column='Transcription', value_storage=transcription),
+        Cell(column='Fluency Score', value_storage=int(fluency_score)),
+        Cell(column='Vocabulary Score', value_storage=int(vocabulary_score)),
+        Cell(column='Syntax Score', value_storage=int(syntax_score)),
+        Cell(column='Communication Score', value_storage=int(communication_score)),
+        Cell(column='Total Lemmas', value_storage=int(total_lemmas)),
+        Cell(column='Unique Lemmas', value_storage=int(unique_lemmas)),
+        Cell(column='Median Frequency', value_storage=median_frequency),
+        Cell(column='wpm', value_storage=int(wpm))
+    ]
+    
+    # Insert the new row into the 'TestSessions' table using upsert_row
+    test_sessions_table.upsert_row(cells)
 
 # Step 4: Function to fetch the correct row from Coda based on the entered code
 def get_audio_prompt_from_coda(code):
