@@ -77,13 +77,11 @@ syntax_score_template = [
 
 communication_score_template = [
     {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
-    {"role": "user", "content": """You are a language expert evaluating the conversational communication of a person learning a language. Please rate their communication skills from 0 to 100. Specifically, assess:
+    {"role": "user", "content": """Please rate their communication skills from 0 to 100. Specifically, assess:
 
 1. Use of fillers, which indicate natural speech.
-2. Ability to ask follow-up questions or ask for clarification, showing active engagement.
-3. Rephrasing of the question to ensure understanding.
-4. Use of slang, idioms, and natural-sounding expressions that are typical of native speakers.
-5. Overall ability to sound fluent and natural in a conversation.
+2. Use of slang, idioms, and natural-sounding expressions that are typical of native speakers.
+3. Overall ability to sound fluent and natural in a conversation.
 
 Evaluate these points and provide a single score from 0 to 100 based on how well they communicate. Only provide the score and no additional explanation. Here is the text: '{transcription}'."""}
 ]
@@ -101,6 +99,8 @@ naturalness_score_template = [
 Based on these criteria, rate the naturalness of the transcription from 0 to 100. Here is the transcription: '{transcription}'. Only provide the score."""}
 ]
 
+# TODO: create a prompt that takes the initial question and assess how accurate the answer is. It can be considered as a comprehension test
+accuracy_score_template = []
 
 def evaluate_syntax(transcription):
     syntax_score = evaluate_score(syntax_score_template, transcription)

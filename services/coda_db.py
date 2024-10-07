@@ -35,20 +35,21 @@ def check_user_in_coda(username):
     users_table = doc.get_table('Users')  # Assuming 'Users' is the table name
     df = pd.DataFrame(users_table.to_dict())
     matching_row = df[df['Username'] == username]
+    st.session_state['username'] = username
     return not matching_row.empty
 
 
 # Function to save test results to Coda
 def save_results_to_coda(username, prompt_code, transcription, fluency_score, vocabulary_score, 
-            syntax_score, communication_score, total_lemmas, unique_lemmas, median_frequency, wpm):
+            syntax_score, communication_score, total_lemmas, unique_lemmas, wpm):
     
     # Fetch the results table
     test_sessions_table = doc.get_table('TestSessions')  # Make sure the table ID is correct
     
     # Define the cells with corresponding column IDs and values
     cells = [
-        Cell(column='Username', value_storage=username),
-        Cell(column='Prompt Code', value_storage=prompt_code),
+        Cell(column='username', value_storage=username),
+        Cell(column='prompt_code', value_storage=prompt_code),
         Cell(column='Test Date', value_storage=pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')),
         Cell(column='Transcription', value_storage=transcription),
         Cell(column='Fluency Score', value_storage=int(fluency_score)),
@@ -57,25 +58,35 @@ def save_results_to_coda(username, prompt_code, transcription, fluency_score, vo
         Cell(column='Communication Score', value_storage=int(communication_score)),
         Cell(column='Total Lemmas', value_storage=int(total_lemmas)),
         Cell(column='Unique Lemmas', value_storage=int(unique_lemmas)),
-        Cell(column='Median Frequency', value_storage=median_frequency),
         Cell(column='wpm', value_storage=int(wpm))
     ]
     
     # Insert the new row into the 'TestSessions' table using upsert_row
     test_sessions_table.upsert_row(cells)
 
-# Step 4: Function to fetch the correct row from Coda based on the entered code
-def get_audio_prompt_from_coda(code):
-    # Search for the row where the 'Code' column matches the input code
-    matching_row = df[df['code'] == code]
+# Step 4: Function to fetch the correct row from Coda based on the entered prompt_code
+def get_prompt_from_coda(prompt_code):
+    # Search for the row where the 'Code' column matches the input prompt_code
+    matching_row = df[df['prompt_code'] == prompt_code]
+    
 
     # If a matching row is found, return the audio prompt
     if not matching_row.empty:
         audio_url = matching_row.iloc[0]['audio_url']  # get audio file
         text = matching_row.iloc[0]['text'] # get text file
+        context = matching_row.iloc[0]['context'] # get the context
+        language_code = matching_row.iloc[0]['language_code'] # get the language_code
+        flag = matching_row.iloc[0]['flag'] # get the flag
         # print(audio_url)
         # print(text)
-        return audio_url, text
-    
+
+        return {
+            'audio_url': audio_url,
+            'text': text,
+            'context': context,
+            'language_code': language_code,
+            'flag': flag
+        }
+
     else:
         return None

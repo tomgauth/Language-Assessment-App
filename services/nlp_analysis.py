@@ -1,60 +1,59 @@
-import spacy
-from wordfreq import word_frequency
 import statistics
+from collections import Counter
+import streamlit as st
 
-# Load the French language model in SpaCy
-nlp = spacy.load("fr_core_news_md")
-
-# Calculate Fluency Score
+# Calculate Fluency Score based on words per minute (WPM)
 def calculate_fluency_score(wpm, min_wpm=30, max_wpm=160):
-    score = max(0, min(100, ((wpm - min_wpm) / (max_wpm - min_wpm)) * 100))
-    return round(score)
+    return round(max(0, min(100, ((wpm - min_wpm) / (max_wpm - min_wpm)) * 100)))
 
-# Calculate Vocabulary Score based on unique lemmas and median frequency
-def calculate_vocabulary_score(unique_lemmas, total_lemmas, median_frequency):
+# Vocabulary Richness Calculation based on lemmas, word length, and POS diversity
+def calculate_vocabulary_richness(unique_lemmas, total_lemmas, avg_word_length):
     unique_lemma_ratio = unique_lemmas / total_lemmas if total_lemmas > 0 else 0
-    median_frequency_score = 1 - median_frequency  # Reward for less common words (lower frequency)
-    score = (unique_lemma_ratio + median_frequency_score) / 2 * 100
+    score = (unique_lemma_ratio + (avg_word_length / 5)) / 2 * 100  # Average score from lemma ratio and word length
     return round(score)
 
-
+# General Text Analysis (without relying on any specific language models)
 def analyze_lemmas_and_frequency(paragraph, duration_in_minutes):
-    """
-    Analyzes the lemmas and word frequency of a paragraph and calculates the fluency, vocabulary scores, and WPM.
+    st.write("Performing general text analysis")
 
-    Parameters:
-    - paragraph: The input text to be analyzed.
-    - duration_in_minutes: The duration of the speech in minutes.
+    # Tokenize by splitting the paragraph into words (basic tokenization)
+    words = [word for word in paragraph.split() if word.isalpha()]
+    
+    total_lemmas = len(words)
+    unique_lemmas = len(set(words))
+    avg_word_length = sum(len(word) for word in words) / total_lemmas if total_lemmas > 0 else 0
 
-    Returns:
-    - analysis_result: A dictionary containing the total lemmas, unique lemmas, median frequency, fluency score, vocabulary score, and WPM.
-    """
-
-    doc = nlp(paragraph)
-    lemmas = [token.lemma_ for token in doc if token.is_alpha]
-
-    total_lemmas = len(lemmas)
-    unique_lemmas = len(set(lemmas))
-    frequencies = [word_frequency(lemma, 'fr', wordlist='best') for lemma in lemmas]
-
-    median_frequency = statistics.median(frequencies) if frequencies else 1  # Use 1 if no frequencies
-
-    # Calculate words per minute (WPM)
-    total_words = len(lemmas)
-    wpm = total_words / duration_in_minutes if duration_in_minutes > 0 else 0
+    # Simple WPM calculation
+    wpm = total_lemmas / duration_in_minutes if duration_in_minutes > 0 else 0
 
     # Calculate Scores
     fluency_score = calculate_fluency_score(wpm)
-    vocabulary_score = calculate_vocabulary_score(unique_lemmas, total_lemmas, median_frequency)
+    vocabulary_richness_score = calculate_vocabulary_richness(unique_lemmas, total_lemmas, avg_word_length)
 
-    # Create a dictionary to return all relevant values
-    analysis_result = {
+    return {
         'total_lemmas': total_lemmas,
         'unique_lemmas': unique_lemmas,
-        'median_frequency': median_frequency,
+        'avg_word_length': avg_word_length,
         'fluency_score': fluency_score,
-        'vocabulary_score': vocabulary_score,
+        'vocabulary_score': vocabulary_richness_score,
         'wpm': wpm
     }
 
-    return analysis_result
+# Function to display the results in a table
+def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, avg_word_length, fluency_score, wpm):
+    st.write("## Detailed Data Table")
+    
+    # Round all numeric values to integers
+    data = {
+        "Metric": ["Vocabulary Score", "Total Lemmas", "Unique Lemmas", "Average Word Length", "Fluency Score (WPM)", "Words per Minute"],
+        "Value": [
+            round(vocabulary_score), 
+            round(total_lemmas), 
+            round(unique_lemmas), 
+            round(avg_word_length, 2),  # Show two decimal places for avg word length
+            round(fluency_score), 
+            round(wpm)
+        ]
+    }
+    st.table(data)
+
