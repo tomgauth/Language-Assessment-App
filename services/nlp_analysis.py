@@ -69,7 +69,7 @@ def calculate_vocabulary_richness(text):
         "score": round(total_score, 2)
     }
     
-    return full_results["score"] # let's keep it simple
+    return round(total_score, 2) # let's keep it simple
 
 
 
@@ -89,7 +89,8 @@ def analyze_lemmas_and_frequency(paragraph, duration_in_minutes):
 
     # Calculate Scores
     fluency_score = calculate_fluency_score(wpm)
-    vocabulary_richness_score = calculate_vocabulary_richness(unique_lemmas, total_lemmas, avg_word_length)
+    # TODO: next function is dupplicating code
+    vocabulary_richness_score = calculate_vocabulary_richness(paragraph)
 
     return {
         'total_lemmas': total_lemmas,
