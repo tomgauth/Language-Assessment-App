@@ -2,9 +2,10 @@ import statistics
 from collections import Counter
 import streamlit as st
 
-# Calculate Fluency Score based on words per minute (WPM)
-def calculate_fluency_score(wpm, min_wpm=30, max_wpm=160):
-    return round(max(0, min(100, ((wpm - min_wpm) / (max_wpm - min_wpm)) * 100)))
+# Simplified the shit out of this because why make it complicated?
+def calculate_fluency_score(wpm, max_wpm=120):
+    # Calculate score based on a simple linear relation up to 120 WPM
+    return round(min(100, (wpm / max_wpm) * 100))
 
 # Vocabulary Richness Calculation based on lemmas, word length, and POS diversity
 # def calculate_vocabulary_richness(unique_lemmas, total_lemmas, avg_word_length):
