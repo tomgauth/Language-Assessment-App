@@ -7,10 +7,70 @@ def calculate_fluency_score(wpm, min_wpm=30, max_wpm=160):
     return round(max(0, min(100, ((wpm - min_wpm) / (max_wpm - min_wpm)) * 100)))
 
 # Vocabulary Richness Calculation based on lemmas, word length, and POS diversity
-def calculate_vocabulary_richness(unique_lemmas, total_lemmas, avg_word_length):
-    unique_lemma_ratio = unique_lemmas / total_lemmas if total_lemmas > 0 else 0
-    score = (unique_lemma_ratio + (avg_word_length / 5)) / 2 * 100  # Average score from lemma ratio and word length
-    return round(score)
+# def calculate_vocabulary_richness(unique_lemmas, total_lemmas, avg_word_length):
+  #  unique_lemma_ratio = unique_lemmas / total_lemmas if total_lemmas > 0 else 0
+  #  score = (unique_lemma_ratio + (avg_word_length / 5)) / 2 * 100  # Average score from lemma ratio and word length
+  # return round(score)
+
+def calculate_vocabulary_richness(text):
+
+    """
+    This function evaluates the vocabulary richness of a given text by calculating a score from 0 to 100.
+    It assesses two main components:
+    
+    1. Total Word Count: The number of words in the input text, with an expected minimum of 120 words.
+    2. Unique Words Ratio: The proportion of words that appear only once in the text, with an expected ratio of 50%.
+    
+    The function calculates two sub-scores:
+    - A word count score out of 50, based on the proportion of the total words relative to the expected 120 words.
+    - A uniqueness score out of 50, based on the ratio of unique words compared to the expected 50%.
+    
+    The final score is the sum of these two sub-scores, capped at 100.
+
+    Parameters:
+    text (str): The input text to evaluate.
+
+    Returns:
+    dict: A dictionary containing the total word count, unique word count, unique word ratio, 
+          and the final vocabulary richness score out of 100.
+    """
+
+    words = text.lower().split()
+    
+    # Total words spoken
+    total_words = len(words)
+    
+    # Count the occurrences of each word
+    from collections import Counter
+    word_counts = Counter(words)
+    
+    # Count the number of unique words (words used only once)
+    unique_words = sum(1 for count in word_counts.values() if count == 1)
+    
+    # Expected values
+    expected_total_words = 120
+    expected_unique_words_ratio = 0.5
+    
+    # Calculate the ratio of unique words in the text
+    actual_unique_words_ratio = unique_words / total_words if total_words > 0 else 0
+    
+    # Calculate scores
+    word_count_score = min(total_words / expected_total_words, 1) * 50
+    uniqueness_score = min(actual_unique_words_ratio / expected_unique_words_ratio, 1) * 50
+    
+    # Total score out of 100
+    total_score = word_count_score + uniqueness_score
+
+    full_results = {
+        "total_words": total_words,
+        "unique_words": unique_words,
+        "unique_words_ratio": actual_unique_words_ratio,
+        "score": round(total_score, 2)
+    }
+    
+    return full_results["score"] # let's keep it simple
+
+
 
 # General Text Analysis (without relying on any specific language models)
 def analyze_lemmas_and_frequency(paragraph, duration_in_minutes):

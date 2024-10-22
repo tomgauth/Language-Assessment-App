@@ -44,9 +44,9 @@ def save_results_to_coda(username, prompt_code, transcription, fluency_score, vo
             syntax_score, communication_score, total_lemmas, unique_lemmas, wpm):
     
     # Fetch the results table
-    test_sessions_table = doc.get_table('TestSessions')  # Make sure the table ID is correct
+    test_sessions_table = doc.get_table('TestSessions')  # Make sure the table ID is correct. https://www.youtube.com/watch?v=PF2ad6pt5k0
     
-    # Define the cells with corresponding column IDs and values
+    # Define the cells with corresponding column IDs and values 
     cells = [
         Cell(column='username', value_storage=username),
         Cell(column='prompt_code', value_storage=prompt_code),

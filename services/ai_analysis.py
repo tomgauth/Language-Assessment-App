@@ -72,18 +72,30 @@ def evaluate_score(prompts, transcription):
 # Define your prompt templates with placeholders for transcription
 syntax_score_template = [
     {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
-    {"role": "user", "content": "Evaluate the syntactic coherence of the following text and rate it from 0 to 100. You are looking at sentence construction, level of speech (long sentences with conjunctions and connectors make more sense): '{transcription}'. Only provide the score."}
+    {"role": "user", "content": """
+     Evaluate the syntactic coherence of the following text and rate it from 0 to 100.
+     Rate the following elements by rating these things out of 20:
+     conjugation: /20
+     syntax: /20 (are sentences structured in a way that follows good syntax) 
+     sentence length: /20 (the longer the better)
+     correctness: /20 (are sentences grammatically correct)
+     fanciness: /20 (use of connectors and conjunctions)
+     : '{transcription}'. Add up all the sub-scores, Only provide the total score."""
+     }
 ]
 
 communication_score_template = [
     {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
-    {"role": "user", "content": """Please rate their communication skills from 0 to 100. Specifically, assess:
-
-1. Use of fillers, which indicate natural speech.
-2. Use of slang, idioms, and natural-sounding expressions that are typical of native speakers.
-3. Overall ability to sound fluent and natural in a conversation.
-
-Evaluate these points and provide a single score from 0 to 100 based on how well they communicate. Only provide the score and no additional explanation. Here is the text: '{transcription}'."""}
+    {"role": "user", "content": """
+    Evaluate the naturalness of the following text and rate it from 0 to 100.
+    Rate the following elements by rating these things out of 20:
+    use of fillers: /20 (natural use of fillers like 'um', 'uh', etc.)
+    slang and idioms: /20 (use of natural-sounding expressions common among native speakers)
+    fluency: /20 (how smooth and uninterrupted the conversation sounds)
+    interactivity: /20 (are they asking back questions, showing engagement?)
+    storytelling and humor: /20 (is there a natural flow to the response, use of jokes, or casual storytelling)
+    : '{transcription}'. Add up all the sub-scores, Only provide the total score."""
+    }
 ]
 
 naturalness_score_template = [
