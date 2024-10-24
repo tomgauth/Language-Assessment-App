@@ -11,7 +11,6 @@ load_dotenv()
 CODA_API_KEY = os.getenv("CODA_API_KEY")
 
 # Coda API credentials
-CODA_API_KEY = "d3068a73-dcbf-4dc1-949c-7b8c733d76e6"
 DOC_ID = 'jPJTMi7bJR'
 TABLE_ID = 'grid-vBrJKADk0W'
 
@@ -64,21 +63,21 @@ def save_results_to_coda(username, prompt_code, transcription, fluency_score, vo
     # Insert the new row into the 'TestSessions' table using upsert_row
     test_sessions_table.upsert_row(cells)
 
-# Step 4: Function to fetch the correct row from Coda based on the entered prompt_code
+# Step 4: Function to fetch a random row from Coda based on the entered prompt_code, ensuring audio_url exists
 def get_prompt_from_coda(prompt_code):
-    # Search for the row where the 'Code' column matches the input prompt_code
-    matching_row = df[df['prompt_code'] == prompt_code]
+    # Search for rows where the 'prompt_code' column matches the input prompt_code and 'audio_url' is not empty
+    matching_rows = df[(df['prompt_code'] == prompt_code) & df['audio_url'].notna() & (df['audio_url'].str.strip() != '')]
     
-
-    # If a matching row is found, return the audio prompt
-    if not matching_row.empty:
-        audio_url = matching_row.iloc[0]['audio_url']  # get audio file
-        text = matching_row.iloc[0]['text'] # get text file
-        context = matching_row.iloc[0]['context'] # get the context
-        language_code = matching_row.iloc[0]['language_code'] # get the language_code
-        flag = matching_row.iloc[0]['flag'] # get the flag
-        # print(audio_url)
-        # print(text)
+    # If there are matching rows with a valid audio_url, select a random row
+    if not matching_rows.empty:
+        random_row = matching_rows.sample(n=1).iloc[0]  # Select one random row
+        
+        # Extract the required data from the selected row
+        audio_url = random_row['audio_url']
+        text = random_row['text']
+        context = random_row['context']
+        language_code = random_row['language_code']
+        flag = random_row['flag']
 
         return {
             'audio_url': audio_url,
