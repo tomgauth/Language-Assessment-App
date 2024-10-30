@@ -2,6 +2,7 @@ import openai
 import os
 from dotenv import load_dotenv
 import streamlit as st
+import re
 
 
 # Load environment variables
@@ -13,115 +14,156 @@ print(openai.api_key)
 def evaluate_score(prompts, transcription):
     """
     Evaluates a language score based on the provided prompts and transcription,
-    returning a number between 0 and 100.
-    
+    returning both a detailed evaluation and a total score.
+
     Parameters:
     - prompts: The prompt or system/user prompts to be evaluated.
     - transcription: The text transcription to be evaluated.
 
     Returns:
-    - score: A number between 0 and 100.
+    - evaluation: Detailed evaluation as a string, containing each criterion's score and comments.
+    - total_score: The total score as an integer between 0 and 100.
     """
 
-    # Check if transcription is valid and print it for debugging
+    # Check if transcription is valid
     if not transcription:
         st.write("Error: Transcription is empty or None.")
-        return 0
+        return "", 0
     
-    # st.write(f"Debug: Received transcription: {transcription}")
-
-    # Inject the transcription into the prompts and print the result
-    for prompt in prompts:
+    # Inject the transcription into the prompts
+    for i, prompt in enumerate(prompts):
         if '{transcription}' in prompt['content']:
             prompt['content'] = prompt['content'].format(transcription=transcription)
-            # st.write(f"Debug: Prompt after injecting transcription: {prompt['content']}")
+            print(f"Debug: Prompt {i} after injecting transcription: {prompt['content']}")
     
-    # Verify if prompts have been correctly formatted
-    # st.write(f"Debug: Final prompts passed to API: {prompts}")
+    print(f"Debug: Final prompts passed to API: {prompts}")
 
     try:
-        # Call the new OpenAI chat completion API
+        # Call the OpenAI chat completion API
         response = openai.chat.completions.create(
             model="gpt-4",
             messages=prompts
         )
         
-        # st.write(f"Debug: API response received: {response}")
+        print(f"Debug: API response received: {response}")
         
         # Extract the content from the response
-        score = response.choices[0].message.content
-        # st.write(f"Debug: Score extracted from API response: {score}")
+        content = response.choices[0].message.content
+        print(f"Debug: Content extracted from API response: {content}")
 
-        # Try converting to an integer and ensure it is between 0 and 100
+        # Separate the evaluation details and total score
         try:
-            score = int(score)
-            if not 0 <= score <= 100:
-                st.write("Error: Score is not within the valid range (0-100). Setting it to 0.")
-                score = 0
-        except ValueError:
-            # st.write("Error: Could not convert score to an integer. Setting score to 0.")
-            score = 0
+            # Define the regex to capture total score as an integer
+            score_regex = r"(?i)total[_\s]*score[:=\s]*[\[\(]?\s*(\d{1,3})\s*[%/\]]?"
 
-        # st.write(f"Debug: Score to send right before response: {score}, type is: {type(score)}")
-        return score
+            # Search for total score using regex
+            match = re.search(score_regex, content)
+            
+            if match:
+                # Extract the score as an integer
+                total_score = int(match.group(1))
+            else:
+                print("Error: Could not find a valid score in the expected format. Setting score to 0.")
+                total_score = 0
+
+            # Assume the rest of the content before "TOTAL_SCORE" is the evaluation part
+            evaluation_part = content.strip()
+
+        except (ValueError, IndexError) as e:
+            print(f"Error parsing evaluation or total score: {str(e)}")
+            evaluation_part = content
+            total_score = 0
+            
+            # Ensure the total score is within the valid range
+            if not 0 <= total_score <= 100:
+                print("Error: Total score is not within the valid range (0-100). Setting it to 0.")
+                total_score = 0
+
+
+        # Debug: Confirm parsed evaluation and total score
+        print(f"Debug: Parsed evaluation: {evaluation_part}")
+        print(f"Debug: Parsed total score: {total_score}")
+        
+        return evaluation_part, total_score
 
     except openai.OpenAIError as e:
-        st.error(f"An error occurred while communicating with OpenAI: {str(e)}")
-        return 0
+        print(f"An error occurred while communicating with OpenAI: {str(e)}")
+        return "", 0
+    
+    
 
 # Define your prompt templates with placeholders for transcription
 syntax_score_template = [
     {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
     {"role": "user", "content": """
-     Evaluate the syntactic coherence of the following text and rate it from 0 to 100.
-     Rate the following elements by rating these things out of 20:
-     conjugation: /20
-     syntax: /20 (are sentences structured in a way that follows good syntax) 
-     sentence length: /20 (the longer the better)
-     correctness: /20 (are sentences grammatically correct)
-     fanciness: /20 (use of connectors and conjunctions)
-     : '{transcription}'. Add up all the sub-scores, Only provide the total score."""
-     }
+    Evaluate the syntactic coherence of the following text and rate it from 0 to 100. Provide the evaluation in two parts:
+    
+    Part 1: Detailed Evaluation
+    - List each of the following criteria with scores out of 20 and a brief comment:
+        1. Conjugation: /20 - (Is verb conjugation correct and consistent?)
+        2. Syntax: /20 - (Are sentences well-structured and syntactically correct?)
+        3. Sentence Length: /20 - (Are sentence lengths varied and appropriate for fluency?)
+        4. Correctness: /20 - (Are there grammar or word choice issues?)
+        5. Fanciness: /20 - (Does the response include connectors and complex structures?)
+
+    Part 2: Total Score
+    - At the end, provide the total score formatted as "TOTAL_SCORE:[total_score]" with a 2 or 3 digit integer in the square brackets.
+    
+    Here is the transcription to evaluate: '{transcription}'."""}
 ]
 
 communication_score_template = [
     {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language and answering to a simple question."},
     {"role": "user", "content": """
-    Evaluate the naturalness of the following text and rate it from 0 to 100.
-    Rate the following elements by rating these things out of 20:
-    use of fillers: /20 (natural use of fillers like 'um', 'uh', etc.)
-    slang and idioms: /20 (use of natural-sounding expressions common among native speakers)
-    fluency: /20 (how smooth and uninterrupted the conversation sounds)
-    interactivity: /20 (are they asking back questions, showing engagement?)
-    storytelling and humor: /20 (is there a natural flow to the response, use of jokes, or casual storytelling)
-    : '{transcription}'. Add up all the sub-scores, Only provide the total score."""
-    }
+    Evaluate the naturalness and communication style of the following text and rate it from 0 to 100. Provide the evaluation in two parts:
+
+    Part 1: Detailed Evaluation
+    - List each of the following criteria with scores out of 20 and a brief comment:
+        1. Use of Fillers: /20 - (Are fillers like 'um', 'uh' used naturally?)
+        2. Slang and Idioms: /20 - (Is natural-sounding slang or idiomatic language used?)
+        3. Fluency: /20 - (Is the conversation smooth and uninterrupted?)
+        4. Interactivity: /20 - (Is the response engaging, with back-and-forth interaction?)
+        5. Storytelling and Humor: /20 - (Does the response have a natural flow, humor, or casual storytelling?)
+
+    Part 2: Total Score
+    - At the end, provide the total score formatted as "TOTAL_SCORE:[total_score]" with a 2 or 3 digit integer in the square brackets.
+    
+    Here is the transcription to evaluate: '{transcription}'."""}
 ]
 
 naturalness_score_template = [
-    {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language. Your goal is to assess how naturally they speak the language, paying special attention to whether their language use resembles that of a native speaker in casual conversation."},
-    {"role": "user", "content": """Evaluate the naturalness of the following transcription, focusing on the following elements:
+    {"role": "system", "content": "You are a language expert evaluating the transcription of a person learning a language, focusing on how naturally they speak the language in a casual context."},
+    {"role": "user", "content": """
+    Evaluate the naturalness of the following transcription, focusing on how closely it resembles native speaker language in casual conversation. Provide the evaluation in two parts:
 
-1. **Use of idioms and natural-sounding expressions**: Does the speaker use idiomatic language or common phrases that native speakers often use?
-2. **Sentence construction**: Does the speaker use varied sentence structures, including short, informal, and sometimes incomplete sentences?
-3. **Use of fillers and hesitations**: Does the speaker include fillers (like "um", "uh", "you know") and natural pauses, which are typical in everyday conversation?
-4. **Flow and rhythm of speech**: Does the transcription read like fluid, conversational speech, even if it includes minor errors or hesitations?
-5. **Overall naturalness**: Does the speaker sound like a native speaker, even if there are small mistakes or hesitations? 
+    Part 1: Detailed Evaluation
+    - List each of the following criteria with scores out of 20 and a brief comment:
+        1. Use of Idioms and Expressions: /20 - (Is idiomatic language used effectively?)
+        2. Sentence Construction: /20 - (Is there variety in sentence structure, including informal styles?)
+        3. Fillers and Hesitations: /20 - (Are fillers and natural pauses present as they would be in casual speech?)
+        4. Flow and Rhythm of Speech: /20 - (Does the transcription flow like conversational speech?)
+        5. Overall Naturalness: /20 - (Does the speaker sound like a native in casual conversation?)
 
-Based on these criteria, rate the naturalness of the transcription from 0 to 100. Here is the transcription: '{transcription}'. Only provide the score."""}
+    Part 2: Total Score
+    - At the end, provide the total score formatted as "TOTAL_SCORE:[total_score]" with a 2 or 3 digit integer in the square brackets.
+    
+    Here is the transcription to evaluate: '{transcription}'."""}
 ]
 
 # TODO: create a prompt that takes the initial question and assess how accurate the answer is. It can be considered as a comprehension test
 accuracy_score_template = []
 
 def evaluate_syntax(transcription):
-    syntax_score = evaluate_score(syntax_score_template, transcription)
-    return syntax_score
+    syntax_eval, syntax_score = evaluate_score(syntax_score_template, transcription)
+    print("syntax_score: ", syntax_score)
+    return syntax_eval, syntax_score
 
 def evaluate_communication(transcription):
-    com_score = evaluate_score(communication_score_template, transcription)
-    return com_score
+    com_eval, com_score = evaluate_score(communication_score_template, transcription)
+    print("com_score: ", com_score)
+    return com_eval, com_score
 
 def evaluate_naturalness(transcription):
-    naturalness_score = evaluate_score(naturalness_score_template, transcription)
-    return naturalness_score
+    naturalness_eval, naturalness_score = evaluate_score(naturalness_score_template, transcription)
+    print("naturalness_score: ", naturalness_score)
+    return naturalness_eval, naturalness_score
