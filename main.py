@@ -34,7 +34,7 @@ def user_and_code_input():
     # Get the username and prompt_code
     username = st.text_input("Enter your username: (enter 'test', to try the app)")
     prompt_code = st.text_input("Enter the prompt code for your audio prompt:   (enter 'TEST' to try the app with a French prompt)")
-    st.session_state['prompt_code'] = prompt_code
+    st.session_state['prompt_code'] = prompt_code.upper().strip()
 
     # Check if both username and code are provided
     if username and prompt_code:
@@ -186,7 +186,8 @@ def handle_transcription_and_analysis(username, transcription, duration_in_minut
 
 def main():
     # Step 1: Test Mode Toggle
-    test_mode = st.checkbox("Enable Test Mode")
+    # test_mode = st.checkbox("Enable Test Mode")
+    test_mode = False
     
     if test_mode:
         # Test Mode: Input fields for transcription and duration
