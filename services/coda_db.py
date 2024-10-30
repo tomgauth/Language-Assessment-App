@@ -39,8 +39,19 @@ def check_user_in_coda(username):
 
 
 # Function to save test results to Coda
-def save_results_to_coda(username, prompt_code, transcription, fluency_score, vocabulary_score, 
-            syntax_score, communication_score, total_lemmas, unique_lemmas, wpm):
+def save_results_to_coda(username, 
+                         prompt_code, 
+                         transcription, 
+                         duration_in_minutes, 
+                         fluency_score, 
+                         vocabulary_score, 
+                         syntax_score, 
+                         communication_score, 
+                         total_lemmas, unique_lemmas, wpm, 
+                         syntax_eval, 
+                         communication_eval, 
+                         naturalness_eval
+                         ):
     
     # Fetch the results table
     test_sessions_table = doc.get_table('TestSessions')  # Make sure the table ID is correct. https://www.youtube.com/watch?v=PF2ad6pt5k0
@@ -51,13 +62,17 @@ def save_results_to_coda(username, prompt_code, transcription, fluency_score, vo
         Cell(column='prompt_code', value_storage=prompt_code),
         Cell(column='Test Date', value_storage=pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')),
         Cell(column='Transcription', value_storage=transcription),
+        Cell(column='Duration', value_storage=duration_in_minutes),
         Cell(column='Fluency Score', value_storage=int(fluency_score)),
+        Cell(column='wpm', value_storage=int(wpm)),
         Cell(column='Vocabulary Score', value_storage=int(vocabulary_score)),
         Cell(column='Syntax Score', value_storage=int(syntax_score)),
         Cell(column='Communication Score', value_storage=int(communication_score)),
         Cell(column='Total Lemmas', value_storage=int(total_lemmas)),
         Cell(column='Unique Lemmas', value_storage=int(unique_lemmas)),
-        Cell(column='wpm', value_storage=int(wpm))
+        Cell(column='syntax_eval', value_storage=syntax_eval),
+        Cell(column='communication_eval', value_storage=communication_eval),
+        Cell(column='naturalness_eval', value_storage=naturalness_eval)
     ]
     
     # Insert the new row into the 'TestSessions' table using upsert_row

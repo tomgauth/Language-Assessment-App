@@ -33,10 +33,25 @@ def get_color(score):
         return "lightgreen"
     else:
         return "green"
+    
+
+def display_evaluations(naturalness_eval, syntax_eval, communication_eval):
+    st.title("Feedback")
+    st.subheader("Syntax")
+    st.write(syntax_eval)
+    st.subheader("Communication")
+    st.write(communication_eval)
+    st.subheader("Naturalness")
+    st.write(naturalness_eval)
 
 
 # Function to display the circular progress charts in a single row
-def display_circular_progress(fluency_score, syntax_score, vocabulary_score, communication_score, naturalness_score):
+def display_circular_progress(fluency_score, wpm,
+                              syntax_score,
+                              vocabulary_score,
+                              communication_score,
+                              naturalness_score
+                              ):
     st.write("## Analysis Scores")
 
     # Use Streamlit columns to display the circular progress charts in one row
@@ -52,6 +67,7 @@ def display_circular_progress(fluency_score, syntax_score, vocabulary_score, com
             track_color="lightgray"
         )
         my_fluency_progress.st_circular_progress()
+        st.write(wpm)
 
     with col2:
         my_syntax_progress = CircularProgress(
@@ -62,7 +78,7 @@ def display_circular_progress(fluency_score, syntax_score, vocabulary_score, com
             color=get_color(syntax_score),
             track_color="lightgray"
         )
-        my_syntax_progress.st_circular_progress()
+        my_syntax_progress.st_circular_progress()        
 
     with col3:
         my_vocabulary_progress = CircularProgress(
@@ -73,7 +89,7 @@ def display_circular_progress(fluency_score, syntax_score, vocabulary_score, com
             color=get_color(vocabulary_score),
             track_color="lightgray"
         )
-        my_vocabulary_progress.st_circular_progress()
+        my_vocabulary_progress.st_circular_progress()        
 
     with col4:
         my_communication_progress = CircularProgress(
@@ -97,6 +113,7 @@ def display_circular_progress(fluency_score, syntax_score, vocabulary_score, com
             track_color="lightgray"
         )
         my_naturalness_progress.st_circular_progress()
+
 
 # Function to display gathered data in a table
 def display_data_table(vocabulary_score, total_lemmas, unique_lemmas, fluency_score, wpm):
