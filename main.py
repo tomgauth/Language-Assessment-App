@@ -8,6 +8,17 @@ from frontend_elements import display_circular_progress, display_data_table, top
 import time
 
 
+
+if st.button("Play Audio TEST"):
+    # HTML5 audio element without controls
+    audio_url = "generated_audio/test_gen.mp3"
+    audio_html = f"""
+    <audio id="audio-player" autoplay>
+        <source src="{audio_url}" type="audio/wav">
+        Your browser does not support the audio element.
+    </audio>
+    """
+
 st.title("Fluency Analyser")
 top_text()
 
@@ -47,13 +58,8 @@ def user_and_code_input():
         # Validate the audio prompt_code
         prompt_data = get_prompt_from_coda(prompt_code)        
 
-        # Ensure 'audio_url' exists in prompt_data
-        try:
-            audio_url = prompt_data.get('audio_url')
-            return prompt_data  # Return valid username and prompt_code
-        except:
-            st.error("Invalid audio prompt code. No audio URL found. Please try again.")
-            return None       
+        return prompt_data  # Return valid username and prompt_code
+  
 
     
     # Return None if either username or prompt_code is missing
@@ -70,14 +76,15 @@ def fetch_and_display_audio_once(prompt_code):
         st.session_state['prompt_text'] = prompt_text
 
         st.write("Context: ", context)        
-
+        st.write("audio file: ", audio_url)
         # Show play button if audio has not been played
+        st.audio(audio_url)
         if not st.session_state['audio_played']:
             if st.button("Play Audio"):
-                # HTML5 audio element without controls
+                # HTML5 audio element without controls                
                 audio_html = f"""
                 <audio id="audio-player" autoplay>
-                    <source src="{audio_url}" type="audio/wav">
+                    <source src="{audio_url}" type="audio/mp3">
                     Your browser does not support the audio element.
                 </audio>
                 """

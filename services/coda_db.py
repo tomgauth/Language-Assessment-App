@@ -3,6 +3,8 @@ import pandas as pd
 from codaio import Coda, Table, Document, Cell
 import os
 from dotenv import load_dotenv
+from services.tts_generator import generate_audio  # Import the TTS generator
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -80,19 +82,30 @@ def save_results_to_coda(username,
 
 # Step 4: Function to fetch a random row from Coda based on the entered prompt_code, ensuring audio_url exists
 def get_prompt_from_coda(prompt_code):
-    # Search for rows where the 'prompt_code' column matches the input prompt_code and 'audio_url' is not empty
-    matching_rows = df[(df['prompt_code'] == prompt_code) & df['audio_url'].notna() & (df['audio_url'].str.strip() != '')]
+    """
+    Fetch a random row from Coda based on the entered prompt_code.
+    If audio_url is missing, generate a new audio URL.
+    """
+    # Search for rows where 'prompt_code' matches the input
+    matching_rows = df[df['prompt_code'] == prompt_code]
     
-    # If there are matching rows with a valid audio_url, select a random row
+    # If there are matching rows, select a random row
     if not matching_rows.empty:
         random_row = matching_rows.sample(n=1).iloc[0]  # Select one random row
         
         # Extract the required data from the selected row
-        audio_url = random_row['audio_url']
+        audio_url = random_row.get('audio_url')
         text = random_row['text']
         context = random_row['context']
         language_code = random_row['language_code']
         flag = random_row['flag']
+        
+        # Check if audio_url is None, NaN, or an empty string
+        if not audio_url or pd.isna(audio_url) or audio_url.strip() == "":
+            # Generate audio if audio_url is missing or empty
+            audio_url = generate_audio(text)  # Assuming this returns a valid file path or URL
+            if not audio_url:
+                raise ValueError("Failed to generate audio.")  # Handle generation failure
 
         return {
             'audio_url': audio_url,
