@@ -205,7 +205,7 @@ def main():
     else:
         # Regular Mode: Validate User and Audio Code
         prompt_data = user_and_code_input()
-        
+        st.write(prompt_data)
         # Check if the username and prompt data are valid
         if prompt_data is not None:
             # Store values in session state to avoid issues with variable scope
