@@ -9,15 +9,6 @@ import time
 
 
 
-if st.button("Play Audio TEST"):
-    # HTML5 audio element without controls
-    audio_url = "generated_audio/test_gen.mp3"
-    audio_html = f"""
-    <audio id="audio-player" autoplay>
-        <source src="{audio_url}" type="audio/wav">
-        Your browser does not support the audio element.
-    </audio>
-    """
 
 st.title("Fluency Analyser")
 top_text()
