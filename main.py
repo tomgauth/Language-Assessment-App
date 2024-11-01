@@ -57,8 +57,7 @@ def user_and_code_input():
     return None
 
 # Step 2: Fetch Audio and Display (with hidden HTML5 audio and play control)
-def fetch_and_display_audio_once(prompt_code):
-    prompt_data = get_prompt_from_coda(prompt_code)
+def fetch_and_display_audio_once(prompt_data):
     audio_url = prompt_data['audio_url']
     prompt_text = prompt_data['text']
     context = prompt_data['context']
@@ -66,23 +65,25 @@ def fetch_and_display_audio_once(prompt_code):
     if audio_url:
         st.session_state['prompt_text'] = prompt_text
 
-        st.write("Context: ", context)        
-        st.write("audio file: ", audio_url)
+        st.header("💡Context: ")
+        st.write(context)
+        # st.write("audio file: ", audio_url)
         # Show play button if audio has not been played
         st.audio(audio_url)
-        if not st.session_state['audio_played']:
-            if st.button("Play Audio"):
-                # HTML5 audio element without controls                
-                audio_html = f"""
-                <audio id="audio-player" autoplay>
-                    <source src="{audio_url}" type="audio/mp3">
-                    Your browser does not support the audio element.
-                </audio>
-                """
-                st.markdown(audio_html, unsafe_allow_html=True)
-                st.session_state['audio_played'] = True  # Mark audio as played
-        else:
-            st.write("You've already played the audio.")
+        ### PLAY ONLY ONCE BUTTON DOESN'T WORK WITH ELENVEN LABS GENERATED AUDIO ###
+#        if not st.session_state['audio_played']:
+#            if st.button("Play Audio"):
+#                # HTML5 audio element without controls                
+#                audio_html = f"""
+#                <audio id="audio-player" autoplay>
+#                    <source src="{audio_url}" type="audio/mp3">
+#                    Your browser does not support the audio element.
+#                </audio>
+#                """
+#                st.markdown(audio_html, unsafe_allow_html=True)
+#                st.session_state['audio_played'] = True  # Mark audio as played
+#        else:
+#            st.write("You've already played the audio.")
         return True
     else:
         st.error("Invalid prompt code. No audio prompt found.")
@@ -205,7 +206,7 @@ def main():
     else:
         # Regular Mode: Validate User and Audio Code
         prompt_data = user_and_code_input()
-        st.write(prompt_data)
+        # st.write(prompt_data)
         # Check if the username and prompt data are valid
         if prompt_data is not None:
             # Store values in session state to avoid issues with variable scope
@@ -216,7 +217,7 @@ def main():
         
             if 'prompt_code' in st.session_state and 'username' in st.session_state:
                 # Step 2: Fetch and display the audio prompt with hidden play once button
-                if fetch_and_display_audio_once(st.session_state['prompt_code']):
+                if fetch_and_display_audio_once(prompt_data):
                     st.write("Please listen to the audio and then start recording your response.")
                     # Store relevant data from prompt_data
                     st.session_state['prompt_text'] = prompt_data['text']

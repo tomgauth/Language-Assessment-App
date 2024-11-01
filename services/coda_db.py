@@ -104,7 +104,7 @@ def get_prompt_from_coda(prompt_code):
         if not audio_url or pd.isna(audio_url) or audio_url.strip() == "":
             # Generate audio if audio_url is missing or empty
             audio_url = generate_audio(text)  # Assuming this returns a valid file path or URL
-            st.write("Debug: ", audio_url)
+            st.write("Debug 1 : ", audio_url)
             if not audio_url:
                 raise ValueError("Failed to generate audio.")  # Handle generation failure
 

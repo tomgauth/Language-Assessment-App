@@ -6,6 +6,7 @@ from elevenlabs import VoiceSettings
 from elevenlabs import play
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
+
 load_dotenv() 
 
 
