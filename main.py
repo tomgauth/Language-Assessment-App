@@ -4,6 +4,7 @@ from services.nlp_analysis import analyze_lemmas_and_frequency
 from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication
 from services.coda_db import get_prompt_from_coda, check_user_in_coda, save_results_to_coda
 from services.export_pdf import export_results_to_pdf
+from services.delete_audio_files import delete_old_audio_files
 from frontend_elements import display_circular_progress, display_data_table, top_text, display_evaluations
 import time
 
@@ -186,6 +187,7 @@ def handle_transcription_and_analysis(username, transcription, duration_in_minut
 def main():
     # Step 1: Test Mode Toggle
     # test_mode = st.checkbox("Enable Test Mode")
+    delete_old_audio_files() # deletes all audio files that are older than 10 minutes
     test_mode = False
     
     if test_mode:
@@ -223,7 +225,7 @@ def main():
                     st.session_state['prompt_text'] = prompt_data['text']
                     st.session_state['prompt_language'] = prompt_data['language_code']
                     st.session_state['flag'] = prompt_data['flag']
-                
+                    
                     # Step 3: Handle Transcription and Analysis
                     transcription, duration_in_minutes = whisper_stt()
                     handle_transcription_and_analysis(st.session_state['username'], transcription, duration_in_minutes)
