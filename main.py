@@ -6,10 +6,19 @@ from services.coda_db import get_prompt_from_coda, check_user_in_coda, save_resu
 from services.export_pdf import export_results_to_pdf
 from services.delete_audio_files import delete_old_audio_files
 from frontend_elements import display_circular_progress, display_data_table, top_text, display_evaluations
+from codaio import Coda
+from models.prompt import Prompt
+from dotenv import load_dotenv
+import os
 import time
 
+# Load environment variables
+load_dotenv()
+CODA_API_KEY = os.getenv("CODA_API_KEY")
+CODA_DOC_ID = os.getenv("CODA_DOC_ID")
 
-
+# Initialize Coda
+coda = Coda(CODA_API_KEY)
 
 st.title("Fluency Analyser")
 top_text()
@@ -41,19 +50,28 @@ def user_and_code_input():
 
     # Check if both username and code are provided
     if username and prompt_code:
-        # Validate username in Coda
-        user_exists = check_user_in_coda(username)
-        if not user_exists:
+        # Get all prompts and filter by user
+        prompts = Prompt.filter(coda, CODA_DOC_ID, prompt_user=username)
+        if not prompts:
             st.error("Username not found. Please register.")
             return None
         
-        # Validate the audio prompt_code
-        prompt_data = get_prompt_from_coda(prompt_code)        
+        # Find the specific prompt by code
+        prompt = next((p for p in prompts if p.prompt_code == prompt_code.upper()), None)
+        if not prompt:
+            st.error("Invalid prompt code for this user.")
+            return None
 
-        return prompt_data  # Return valid username and prompt_code
-  
+        # Convert prompt to dictionary format for compatibility
+        prompt_data = {
+            'audio_url': prompt.audio_url,
+            'text': prompt.text,
+            'context': prompt.context,
+            'language_code': prompt.language_code,
+            'flag': prompt.flag
+        }
+        return prompt_data
 
-    
     # Return None if either username or prompt_code is missing
     return None
 
