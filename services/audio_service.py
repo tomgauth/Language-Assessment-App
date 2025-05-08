@@ -1,9 +1,7 @@
 from io import BytesIO
 import numpy as np
-import whisper
-
-# Load Whisper model
-model = whisper.load_model("base")
+import os
+from openai import OpenAI
 
 def process_audio(audio_frames):
     # Check if there is any audio data
@@ -14,9 +12,14 @@ def process_audio(audio_frames):
     audio_data = np.concatenate([np.array(frame.to_ndarray()) for frame in audio_frames if frame is not None])
     audio_bytes = BytesIO(audio_data.tobytes())
 
-    # Transcribe the audio using Whisper
-    result = model.transcribe(audio_bytes, fp16=False)
-    transcription = result["text"]
-    audio_duration = result["duration"]
+    # Transcribe the audio using OpenAI Whisper API
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    result = client.audio.transcriptions.create(
+        model="whisper-1",
+        file=audio_bytes,
+        language=None
+    )
+    transcription = result.text
+    audio_duration = 0  # You may need to calculate this separately if needed
 
     return transcription, audio_duration

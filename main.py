@@ -2,251 +2,217 @@ import streamlit as st
 from services.transcription import whisper_stt
 from services.nlp_analysis import analyze_lemmas_and_frequency
 from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication
-from services.coda_db import get_prompt_from_coda, check_user_in_coda, save_results_to_coda
+from services.coda_db import save_results_to_coda
 from services.export_pdf import export_results_to_pdf
 from services.delete_audio_files import delete_old_audio_files
 from frontend_elements import display_circular_progress, display_data_table, top_text, display_evaluations
-from codaio import Coda
-from models.prompt import Prompt
+from models.coda_service import CodaService
 from dotenv import load_dotenv
 import os
 import time
+import random
+import pandas as pd
 
 # Load environment variables
 load_dotenv()
 CODA_API_KEY = os.getenv("CODA_API_KEY")
 CODA_DOC_ID = os.getenv("CODA_DOC_ID")
 
-# Initialize Coda
-coda = Coda(CODA_API_KEY)
+# Initialize Coda Service
+coda_service = CodaService(CODA_API_KEY, CODA_DOC_ID)
 
-st.title("Fluency Analyser")
-top_text()
+# Table IDs for relational traversal
+USERS_TABLE_ID = "grid-qqR8f6GhaA"
+CHALLENGES_TABLE_ID = "grid-frCt4QLI3B"
+CONV_TABLE_ID = "grid-nCqNTa30ig"
+TOPICS_TABLE_ID = "grid-iG8u3niYDD"
+PROMPTS_TABLE_ID = "grid-vBrJKADk0W"
 
-# Step 1: Initialize session state variables
-if 'transcription' not in st.session_state:
-    st.session_state['transcription'] = ""
-if 'prompt_text' not in st.session_state:
-    st.session_state['prompt_text'] = ""
-if 'duration_in_minutes' not in st.session_state:
-    st.session_state['duration_in_minutes'] = 0.1  # Default value
-if 'prompt_code' not in st.session_state:
-    st.session_state['prompt_code'] = ""
-if 'language_code' not in st.session_state:
-    st.session_state['language_code'] = ""
-if 'flag' not in st.session_state:
-    st.session_state['flag'] = ""
-if 'username' not in st.session_state:
-    st.session_state['username'] = ""
-if 'audio_played' not in st.session_state:
-    st.session_state['audio_played'] = False  # Track if audio has been played
+# Helper: get column mapping for a table
+schema_cache = {}
+def get_table_mapping(table_id):
+    if table_id not in schema_cache:
+        schema = coda_service.get_table_schema(table_id)
+        schema_cache[table_id] = {col['id']: col['name'] for col in schema['columns']}
+    return schema_cache[table_id]
 
-# Step 1: Validate User and Audio Prompt Code
-def user_and_code_input():
-    # Get the username and prompt_code
-    username = st.text_input("Enter your username: (enter 'test', to try the app)")
-    prompt_code = st.text_input("Enter the prompt code for your audio prompt:   (enter 'TEST' to try the app with a French prompt)")
-    st.session_state['prompt_code'] = prompt_code.upper().strip()
+def map_rows(rows, mapping):
+    return [
+        {mapping.get(k, k): v for k, v in dict(row.values).items()} | {"_row_id": row.id} for row in rows
+    ]
 
-    # Check if both username and code are provided
-    if username and prompt_code:
-        # Get all prompts and filter by user
-        prompts = Prompt.filter(coda, CODA_DOC_ID, prompt_user=username)
-        if not prompts:
-            st.error("Username not found. Please register.")
-            return None
-        
-        # Find the specific prompt by code
-        prompt = next((p for p in prompts if p.prompt_code == prompt_code.upper()), None)
-        if not prompt:
-            st.error("Invalid prompt code for this user.")
-            return None
+# --- Step 1: Username input and validation ---
+if 'username_validated' not in st.session_state:
+    st.session_state['username_validated'] = False
+if 'selected_conversation' not in st.session_state:
+    st.session_state['selected_conversation'] = None
+if 'conversation_validated' not in st.session_state:
+    st.session_state['conversation_validated'] = False
 
-        # Convert prompt to dictionary format for compatibility
-        prompt_data = {
-            'audio_url': prompt.audio_url,
-            'text': prompt.text,
-            'context': prompt.context,
-            'language_code': prompt.language_code,
-            'flag': prompt.flag
-        }
-        return prompt_data
+st.set_page_config(
+    page_title="Fluency Analyzer",
+    page_icon="🎯",
+    layout="wide"
+)
+st.title("🎯 Fluency Analyzer")
 
-    # Return None if either username or prompt_code is missing
-    return None
+# Step 1: Username
+if not st.session_state['username_validated']:
+    username = st.text_input("Entrez votre nom d'utilisateur :", key="username_input")
+    if st.button("Valider le nom d'utilisateur"):
+        users_mapping = get_table_mapping(USERS_TABLE_ID)
+        users = coda_service.get_rows(USERS_TABLE_ID)
+        users_data = map_rows(users, users_mapping)
+        user = next((u for u in users_data if u.get('username') == username), None)
+        if not user:
+            st.error("Nom d'utilisateur introuvable. Veuillez vérifier ou vous inscrire.")
+            st.stop()
+        st.session_state['username'] = username
+        st.session_state['user_id'] = user['_row_id']
+        st.session_state['username_validated'] = True
+        st.rerun()
+    st.stop()
 
-# Step 2: Fetch Audio and Display (with hidden HTML5 audio and play control)
-def fetch_and_display_audio_once(prompt_data):
-    audio_url = prompt_data['audio_url']
-    prompt_text = prompt_data['text']
-    context = prompt_data['context']
+# Step 2: Conversation selection
+user_id = st.session_state['user_id']
+challenges_mapping = get_table_mapping(CHALLENGES_TABLE_ID)
+challenges = coda_service.get_rows(CHALLENGES_TABLE_ID)
+challenges_data = map_rows(challenges, challenges_mapping)
+user_challenges = [c for c in challenges_data if c.get('user_id') == user_id]
 
-    if audio_url:
-        st.session_state['prompt_text'] = prompt_text
+conv_mapping = get_table_mapping(CONV_TABLE_ID)
+conversations = coda_service.get_rows(CONV_TABLE_ID)
+conversations_data = map_rows(conversations, conv_mapping)
+challenge_ids = [c['_row_id'] for c in user_challenges]
+user_conversations = [c for c in conversations_data if c.get('challenge_id') in challenge_ids]
 
-        st.header("💡Context: ")
-        st.write(context)
-        # st.write("audio file: ", audio_url)
-        # Show play button if audio has not been played
-        st.audio(audio_url)
-        ### PLAY ONLY ONCE BUTTON DOESN'T WORK WITH ELENVEN LABS GENERATED AUDIO ###
-#        if not st.session_state['audio_played']:
-#            if st.button("Play Audio"):
-#                # HTML5 audio element without controls                
-#                audio_html = f"""
-#                <audio id="audio-player" autoplay>
-#                    <source src="{audio_url}" type="audio/mp3">
-#                    Your browser does not support the audio element.
-#                </audio>
-#                """
-#                st.markdown(audio_html, unsafe_allow_html=True)
-#                st.session_state['audio_played'] = True  # Mark audio as played
-#        else:
-#            st.write("You've already played the audio.")
-        return True
-    else:
-        st.error("Invalid prompt code. No audio prompt found.")
-        return False
+if not st.session_state['conversation_validated']:
+    if not user_conversations:
+        st.error("Aucune conversation trouvée pour cet utilisateur.")
+        st.stop()
+    conversation_options = {c.get('conversation_name', f"Conversation {i}"): c for i, c in enumerate(user_conversations)}
+    selected_conversation_name = st.selectbox("Choisissez une conversation à pratiquer :", list(conversation_options.keys()), key="conversation_select")
+    if st.button("Valider la conversation"):
+        st.session_state['selected_conversation'] = conversation_options[selected_conversation_name]
+        st.session_state['conversation_validated'] = True
+        st.rerun()
+    st.stop()
 
+# Step 3: Prompt selection and fluency analyzer interface
+selected_conversation = st.session_state['selected_conversation']
+conversation_id = selected_conversation['_row_id']
 
-def handle_transcription_and_analysis(username, transcription, duration_in_minutes):
-    if transcription:
-        # Store transcription and duration in session state
-        st.session_state['transcription'] = transcription
-        st.session_state['duration_in_minutes'] = duration_in_minutes
-        
-        # Display the transcription
-        st.write("Transcription:")
-        st.write(st.session_state['transcription'])
-        st.write(f"Duration: {st.session_state['duration_in_minutes']} minutes")
+# Topics for this conversation
+topics_mapping = get_table_mapping(TOPICS_TABLE_ID)
+topics = coda_service.get_rows(TOPICS_TABLE_ID)
+topics_data = map_rows(topics, topics_mapping)
+conversation_topics = [t for t in topics_data if t.get('conversation_id') == conversation_id]
 
-        # Step 4: Show progress bar and analyze results
-        progress_bar = st.progress(0)
-        progress_text = st.empty()  # Placeholder for loading text updates
+if not conversation_topics:
+    st.error("Aucun sujet trouvé pour cette conversation.")
+    st.stop()
 
-        # Step 4.1: Analyze lemmas and frequency (20%)
-        progress_text.text("Analyzing lemmas and frequency...")
-        analysis_result = analyze_lemmas_and_frequency(
-            transcription, 
-            duration_in_minutes=st.session_state['duration_in_minutes']
-        )
-        progress_bar.progress(20)
-        
-        total_lemmas = analysis_result['total_lemmas']
-        unique_lemmas = analysis_result['unique_lemmas']        
-        fluency_score = analysis_result['fluency_score']
-        vocabulary_score = analysis_result['vocabulary_score']
-        wpm = analysis_result['wpm']
-        prompt_code = st.session_state['prompt_code']
+# Select a topic (if multiple)
+topic_options = {t.get('topic_name', f"Sujet {i}"): t for i, t in enumerate(conversation_topics)}
+selected_topic_name = st.selectbox("Choisissez un sujet à pratiquer :", list(topic_options.keys()), key="topic_select")
+selected_topic = topic_options[selected_topic_name]
+topic_id = selected_topic['_row_id']
 
-        # Step 4.2: Syntax Evaluation (40%)
-        progress_text.text("Evaluating syntax...")
-        syntax_evaluation, syntax_score = evaluate_syntax(transcription)
-        progress_bar.progress(40)
+# Get a random prompt for the selected topic
+def get_random_prompt_for_topic(topic_id):
+    prompts_mapping = get_table_mapping(PROMPTS_TABLE_ID)
+    prompts = coda_service.get_rows(PROMPTS_TABLE_ID)
+    prompts_data = map_rows(prompts, prompts_mapping)
+    topic_prompts = [p for p in prompts_data if p.get('topic_id') == topic_id]
+    if not topic_prompts:
+        return None
+    return random.choice(topic_prompts)
 
-        # Step 4.3: Communication Evaluation (60%)
-        progress_text.text("Evaluating communication...")
-        communication_evaluation, communication_score = evaluate_communication(transcription)
-        progress_bar.progress(60)
+prompt = get_random_prompt_for_topic(topic_id)
+if not prompt:
+    st.error("Aucun prompt trouvé pour ce sujet.")
+    st.stop()
 
-        # Step 4.4: Naturalness Evaluation (80%)
-        progress_text.text("Evaluating naturalness...")
-        naturalness_evaluation, naturalness_score = evaluate_naturalness(transcription)
-        progress_bar.progress(80)
+# Display prompt and context
+st.header("💡 Prompt")
+st.write(f"**Prompt:** {prompt.get('text', 'No prompt text available')}")
+st.write(f"**Context:** {prompt.get('context', 'No context available')}")
+if prompt.get('audio_url'):
+    st.audio(prompt['audio_url'])
 
-        # Step 4.5: Save Results to Database (100%)
-        progress_text.text("Saving results...")
-        save_results_to_coda(
-            username, 
-            prompt_code, 
-            transcription, 
-            duration_in_minutes, 
-            fluency_score, 
-            vocabulary_score, 
-            syntax_score, 
-            communication_score, 
-            total_lemmas, 
-            unique_lemmas, 
-            wpm, 
-            syntax_evaluation, 
-            communication_evaluation, 
-            naturalness_evaluation
-        )
-        progress_bar.progress(100)
-        
-        # Display success message and results
-        st.success("Results saved successfully on the app")
-
-        # Display results
-        display_circular_progress(fluency_score, wpm, 
-                                  int(syntax_score), 
-                                  int(vocabulary_score),
-                                  int(communication_score),
-                                  int(naturalness_score)
-                                  )
-        display_evaluations(naturalness_evaluation, syntax_evaluation, communication_evaluation)
-        
-        display_data_table(vocabulary_score, total_lemmas, unique_lemmas, fluency_score, wpm)
-        
-        export_results_to_pdf(username, 
-                              transcription, 
-                              vocabulary_score, 
-                              total_lemmas, 
-                              unique_lemmas, 
-                              fluency_score, 
-                              wpm, 
-                              syntax_score, 
-                              communication_score, 
-                              st.session_state['prompt_text'], 
-                              prompt_code
-                              )
-        st.balloons()
-
-def main():
-    # Step 1: Test Mode Toggle
-    # test_mode = st.checkbox("Enable Test Mode")
-    delete_old_audio_files() # deletes all audio files that are older than 10 minutes
-    test_mode = False
-    
-    if test_mode:
-        # Test Mode: Input fields for transcription and duration
-        st.write("Test Mode is active. Enter a transcription and duration manually.")
-        # transcription = st.text_area("Enter the transcription:")
-        transcription = "Oui, en fait, je suis complètement en vacances ici je n'ai pas du tout déménagé, en fait, j'habite toujours aux Etats-Unis je suis juste venu en vacances, faire un peu de tourisme je suis allé à Paris, je suis allé à Bordeaux et là, maintenant, je suis à L'Aigle parce que j'habite au Kansas, en fait et bon, c'est sympa, mais à part des fermes et des vaches, il n'y a pas grand chose"
-        # duration_in_minutes = st.number_input("Enter the duration (in minutes):", min_value=0.1, step=0.1)
-        duration_in_minutes = 1
-        
-        if st.button("Run Test"):
-            # Store transcription and duration in session state
-            st.session_state['transcription'] = transcription
-            st.session_state['duration_in_minutes'] = duration_in_minutes
-            
-            # Directly proceed to the analysis step
-            handle_transcription_and_analysis("test", transcription, duration_in_minutes)
-    else:
-        # Regular Mode: Validate User and Audio Code
-        prompt_data = user_and_code_input()
-        # st.write(prompt_data)
-        # Check if the username and prompt data are valid
-        if prompt_data is not None:
-            # Store values in session state to avoid issues with variable scope
-            st.session_state['prompt_code'] = st.session_state['prompt_code']
-            st.session_state['username'] = st.session_state.get('username')
-            st.session_state['language_code'] = prompt_data['language_code']
-            st.session_state['flag'] = prompt_data['flag']
-        
-            if 'prompt_code' in st.session_state and 'username' in st.session_state:
-                # Step 2: Fetch and display the audio prompt with hidden play once button
-                if fetch_and_display_audio_once(prompt_data):
-                    st.write("Please listen to the audio and then start recording your response.")
-                    # Store relevant data from prompt_data
-                    st.session_state['prompt_text'] = prompt_data['text']
-                    st.session_state['prompt_language'] = prompt_data['language_code']
-                    st.session_state['flag'] = prompt_data['flag']
-                    
-                    # Step 3: Handle Transcription and Analysis
-                    transcription, duration_in_minutes = whisper_stt()
-                    handle_transcription_and_analysis(st.session_state['username'], transcription, duration_in_minutes)
+# Record audio
+st.header("🎤 Enregistrez votre réponse")
+audio_bytes = st.audio_input("Enregistrez votre réponse ici :")
+if audio_bytes:
+    # Save the audio file
+    audio_file = "temp_audio.wav"
+    with open(audio_file, "wb") as f:
+        f.write(audio_bytes)
+    # Transcribe the audio
+    transcription = whisper_stt(audio_file)
+    # Calculate duration
+    duration_in_minutes = len(audio_bytes) / (16000 * 2) / 60  # Approximate duration in minutes
+    # Handle transcription and analysis
+    st.write("Transcription:")
+    st.write(transcription)
+    # (The rest of the analysis and saving logic remains unchanged)
+    # Analyze lemmas and frequency (20%)
+    analysis_result = analyze_lemmas_and_frequency(
+        transcription, 
+        duration_in_minutes=duration_in_minutes
+    )
+    total_lemmas = analysis_result['total_lemmas']
+    unique_lemmas = analysis_result['unique_lemmas']        
+    fluency_score = analysis_result['fluency_score']
+    vocabulary_score = analysis_result['vocabulary_score']
+    wpm = analysis_result['wpm']
+    # Syntax Evaluation
+    syntax_evaluation, syntax_score = evaluate_syntax(transcription)
+    # Communication Evaluation
+    communication_evaluation, communication_score = evaluate_communication(transcription)
+    # Naturalness Evaluation
+    naturalness_evaluation, naturalness_score = evaluate_naturalness(transcription)
+    # Save Results to Database
+    save_results_to_coda(
+        st.session_state['username'], 
+        prompt.get('prompt_code', ''), 
+        transcription, 
+        duration_in_minutes, 
+        fluency_score, 
+        vocabulary_score, 
+        syntax_score, 
+        communication_score, 
+        total_lemmas, 
+        unique_lemmas, 
+        wpm, 
+        syntax_evaluation, 
+        communication_evaluation, 
+        naturalness_evaluation
+    )
+    st.success("Résultats enregistrés avec succès dans l'application")
+    # Display results
+    display_circular_progress(fluency_score, wpm, 
+                            int(syntax_score), 
+                            int(vocabulary_score),
+                            int(communication_score),
+                            int(naturalness_score)
+                            )
+    display_evaluations(naturalness_evaluation, syntax_evaluation, communication_evaluation)
+    display_data_table(vocabulary_score, total_lemmas, unique_lemmas, fluency_score, wpm)
+    export_results_to_pdf(st.session_state['username'], 
+                        transcription, 
+                        vocabulary_score, 
+                        total_lemmas, 
+                        unique_lemmas, 
+                        fluency_score, 
+                        wpm, 
+                        syntax_score, 
+                        communication_score, 
+                        prompt.get('text', ''), 
+                        naturalness_evaluation, 
+                        syntax_evaluation, 
+                        communication_evaluation)
+    delete_old_audio_files()
 
 if __name__ == "__main__":
     main()

@@ -29,12 +29,12 @@ def get_audio_duration(audio_bytes):
 def transcribe_audio(openai_api_key, audio_bio, language=None):
     try:
         client = OpenAI(api_key=openai_api_key)
-        transcript = client.audio.transcriptions.create(
+        result = client.audio.transcriptions.create(
             model="whisper-1",
             file=audio_bio,
             language=language
         )
-        return transcript.text
+        return result.text
     except Exception as e:
         print(f"Error transcribing audio: {e}")
         return None
@@ -67,8 +67,14 @@ def whisper_stt(openai_api_key=None, start_prompt="▶️ Start recording", stop
         # Measure audio duration
         duration_in_minutes = get_audio_duration(audio_bytes)
         
-        # Transcribe audio using Whisper
-        transcription = transcribe_audio(openai_api_key, audio_bio, language)
+        # Transcribe audio using OpenAI Whisper API
+        client = OpenAI(api_key=openai_api_key)
+        result = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_bio,
+            language=None
+        )
+        transcription = result.text
         
         # Store the transcription in session state
         if transcription:
