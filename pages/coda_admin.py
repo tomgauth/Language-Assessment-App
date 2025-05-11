@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from models.coda_service import CodaService
 from codaio import Cell
 import pandas as pd
+from repository.user_repository import get_all_users
 
 # Load environment variables
 load_dotenv()
@@ -52,15 +53,23 @@ st.dataframe(schema_df[['name', 'type', 'calculated']])
 # Display table data
 st.subheader("Table Data")
 if rows:
-    # Convert rows to DataFrame
-    data = []
-    for row in rows:
-        # Convert row values to dictionary
-        row_data = dict(row.values)
-        row_data['id'] = row.id  # Add row ID
-        data.append(row_data)
-    
-    df = pd.DataFrame(data)
+    if selected_table == "Users":
+        users = get_all_users(coda_service)
+        data = [{
+            "username": u.username,
+            "first_name": u.user_first_name,
+            "last_name": u.user_last_name,
+            "id": u._row_id
+        } for u in users]
+        df = pd.DataFrame(data)
+    else:
+        # Convert rows to DataFrame
+        data = []
+        for row in rows:
+            row_data = dict(row.values)
+            row_data['id'] = row.id  # Add row ID
+            data.append(row_data)
+        df = pd.DataFrame(data)
     
     # Add search functionality
     search_term = st.text_input("Search in all columns")

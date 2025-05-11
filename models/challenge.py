@@ -2,7 +2,7 @@ from typing import Optional
 from .base import CodaModel
 
 class Challenge(CodaModel):
-    TABLE_ID = "tblChallenges"
+    TABLE_ID = "grid-frCt4QLI3B"
     COLS = {
         "user_id": "colUserId",
         "prompt_id": "colPromptId",
