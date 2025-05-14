@@ -214,3 +214,6 @@ zh-core-web-md @ https://github.com/explosion/spacy-models/releases/download/zh_
 streamlit==1.45.1
 streamlit-webrtc==0.47.9
 streamlit_mic_recorder==0.0.8
+streamlit==1.45.1
+streamlit-webrtc==0.47.9
+streamlit_mic_recorder==0.0.8
