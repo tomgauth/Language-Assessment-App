@@ -77,6 +77,7 @@ if not st.session_state['username_validated']:
 
 # Step 2: Conversation selection
 user_id = st.session_state['user_id']
+user_id = "i-xaPqAx4SOQ"
 challenges_mapping = get_table_mapping(CHALLENGES_TABLE_ID)
 challenges = coda_service.get_rows(CHALLENGES_TABLE_ID)
 challenges_data = map_rows(challenges, challenges_mapping)
@@ -124,7 +125,7 @@ topic_id = selected_topic['_row_id']
 skills_mapping = get_table_mapping(SKILLS_TABLE_ID)
 skills = coda_service.get_rows(SKILLS_TABLE_ID)
 skills_data = map_rows(skills, skills_mapping)
-topic_skills = [s for s in skills_data if s.get('topic_id') == topic_id]
+topic_skills = [s for s in skills_data if s.get('conversation_id') == conversation_id]
 
 st.write(topic_skills)
 
@@ -182,7 +183,9 @@ if audio_uploaded is not None:
     # Save Results to Database
     # Add here the dynamic analysis based on the users skills. Each user's conversation has one or many skills
     # The skills are provided from the user's skills table in Coda
-    skills_analysis = dynamic_skills_analysis(transcription)
+    skills_agent_prompts = [skill.skill_agent_prompt for skill in topic_skills]
+    skills_analysis = dynamic_skills_analysis(transcription, skills_agent_prompts)
+
 
     try:
         save_results_to_coda(
@@ -210,8 +213,14 @@ if audio_uploaded is not None:
                             int(syntax_score), 
                             int(vocabulary_score),
                             int(communication_score),
-                            int(naturalness_score)
+                            int(naturalness_score),
                             )
+    # Display circular progress for each skill score
+    if skills_analysis:
+        for skill_result in skills_analysis:
+            if skill_result["score"] is not None:
+                st.write(f"### {skill_result['skill']} Score")
+                display_circular_progress(int(skill_result["score"]))
     display_evaluations(naturalness_evaluation, syntax_evaluation, communication_evaluation)
     display_data_table(vocabulary_score, total_lemmas, unique_lemmas, fluency_score, wpm)
     export_results_to_pdf(st.session_state['username'], 
