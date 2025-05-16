@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -219,26 +219,8 @@ def _get_st_write_from_expr(
     # If tuple, call st.write(*the_tuple). This allows us to add a comma at the end of a
     # statement to turn it into an expression that should be st-written. Ex:
     # "np.random.randn(1000, 2),"
-    if type(node.value) is ast.Tuple:
-        args = node.value.elts
-        st_write = _build_st_write_call(args)
-
-    # st.write all strings.
-    elif type(node.value) is ast.Str:
-        args = [node.value]
-        st_write = _build_st_write_call(args)
-
-    # st.write all variables.
-    elif type(node.value) is ast.Name:
-        args = [node.value]
-        st_write = _build_st_write_call(args)
-
-    # st.write everything else
-    else:
-        args = [node.value]
-        st_write = _build_st_write_call(args)
-
-    return st_write
+    args = node.value.elts if type(node.value) is ast.Tuple else [node.value]
+    return _build_st_write_call(args)
 
 
 def _is_string_constant_node(node) -> bool:
@@ -259,6 +241,9 @@ def _does_file_end_in_semicolon(tree, code: str) -> bool:
     # Avoid spending time with this operation if magic.displayLastExprIfNoSemicolon is
     # not set.
     if config.get_option("magic.displayLastExprIfNoSemicolon"):
+        if len(tree.body) == 0:
+            return False
+
         last_line_num = getattr(tree.body[-1], "end_lineno", None)
 
         if last_line_num is not None:

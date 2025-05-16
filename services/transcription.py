@@ -34,7 +34,7 @@ def transcribe_audio(openai_api_key, audio_bio, language=None):
             file=audio_bio,
             language=language
         )
-        return result.text
+        return result
     except Exception as e:
         print(f"Error transcribing audio: {e}")
         return None

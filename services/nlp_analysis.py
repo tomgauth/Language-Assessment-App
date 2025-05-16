@@ -74,9 +74,10 @@ def calculate_vocabulary_richness(text):
 
 
 # General Text Analysis (without relying on any specific language models)
-def analyze_lemmas_and_frequency(paragraph, duration_in_minutes):
+def analyze_lemmas_and_frequency(transcription, duration_in_minutes):
     st.write("Performing general text analysis")
 
+    paragraph = transcription.text
     # Tokenize by splitting the paragraph into words (basic tokenization)
     words = [word for word in paragraph.split() if word.isalpha()]
     

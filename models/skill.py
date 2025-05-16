@@ -2,27 +2,27 @@ from typing import Optional
 from .base import CodaModel
 
 class Skill(CodaModel):
-    TABLE_ID = "tblSkills"
+    TABLE_ID = "grid-VZpWaIP27c"  # Update if your table ID is differentgrid-VZpWaIP27c
     COLS = {
-        "name": "colName",
-        "description": "colDescription",
-        "category": "colCategory",
-        "level": "colLevel",
-        "status": "colStatus",
+        "skill_name": "skill_name",
+        "skill_agent_prompt": "skill_agent_prompt",
+        "skill_teach_description": "skill_teach_description",
+        "Conversations": "Conversations",
+        "conversation_id": "conversation_id",
     }
 
     def __init__(
         self,
-        name: str,
-        description: str,
-        category: str,
-        level: str,
-        status: str,
+        skill_name: str,
+        skill_agent_prompt: str,
+        skill_teach_description: str,
+        Conversations: str,
+        conversation_id: str,
         _row_id: Optional[str] = None
     ):
-        self.name = name
-        self.description = description
-        self.category = category
-        self.level = level
-        self.status = status
+        self.skill_name = skill_name
+        self.skill_agent_prompt = skill_agent_prompt
+        self.skill_teach_description = skill_teach_description
+        self.Conversations = Conversations
+        self.conversation_id = conversation_id
         self._row_id = _row_id 

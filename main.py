@@ -1,10 +1,11 @@
 import streamlit as st
-from services.transcription import whisper_stt
+from services.transcription import whisper_stt, convert_audio_to_wav, transcribe_audio
 from services.nlp_analysis import analyze_lemmas_and_frequency
 from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication
 from services.coda_db import save_results_to_coda
 from services.export_pdf import export_results_to_pdf
 from services.delete_audio_files import delete_old_audio_files
+from services.dynamic_skills_analysis import dynamic_skills_analysis
 from frontend_elements import display_circular_progress, display_data_table, top_text, display_evaluations
 from models.coda_service import CodaService
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ CHALLENGES_TABLE_ID = "grid-frCt4QLI3B"
 CONV_TABLE_ID = "grid-nCqNTa30ig"
 TOPICS_TABLE_ID = "grid-iG8u3niYDD"
 PROMPTS_TABLE_ID = "grid-vBrJKADk0W"
+SKILLS_TABLE_ID = "grid-VZpWaIP27c"
 
 # Helper: get column mapping for a table
 schema_cache = {}
@@ -118,6 +120,14 @@ selected_topic_name = st.selectbox("Choisissez un sujet à pratiquer :", list(to
 selected_topic = topic_options[selected_topic_name]
 topic_id = selected_topic['_row_id']
 
+# Get the skills for the selected topic
+skills_mapping = get_table_mapping(SKILLS_TABLE_ID)
+skills = coda_service.get_rows(SKILLS_TABLE_ID)
+skills_data = map_rows(skills, skills_mapping)
+topic_skills = [s for s in skills_data if s.get('topic_id') == topic_id]
+
+st.write(topic_skills)
+
 # Get a random prompt for the selected topic
 def get_random_prompt_for_topic(topic_id):
     prompts_mapping = get_table_mapping(PROMPTS_TABLE_ID)
@@ -141,21 +151,18 @@ if prompt.get('audio_url'):
     st.audio(prompt['audio_url'])
 
 # Record audio
-st.header("🎤 Enregistrez votre réponse")
-audio_bytes = st.audio_input("Enregistrez votre réponse ici :")
-if audio_bytes:
-    # Save the audio file
-    audio_file = "temp_audio.wav"
-    with open(audio_file, "wb") as f:
-        f.write(audio_bytes)
-    # Transcribe the audio
-    transcription = whisper_stt(audio_file)
-    # Calculate duration
-    duration_in_minutes = len(audio_bytes) / (16000 * 2) / 60  # Approximate duration in minutes
-    # Handle transcription and analysis
+st.header("🎤 Record your answer")
+audio_uploaded = st.audio_input("🎤 Record your answer here: ")
+if not audio_uploaded:
+    st.error("No audio uploaded. Please record your answer.")
+    st.stop()
+if audio_uploaded is not None:
+    audio_bytes = audio_uploaded.read()
+    audio_bio = convert_audio_to_wav(audio_bytes)
+    transcription = transcribe_audio(os.getenv("OPENAI_API_KEY"), audio_bio) # this returns a string
+    duration_in_minutes = len(audio_bytes) / (16000 * 2) / 60
     st.write("Transcription:")
     st.write(transcription)
-    # (The rest of the analysis and saving logic remains unchanged)
     # Analyze lemmas and frequency (20%)
     analysis_result = analyze_lemmas_and_frequency(
         transcription, 
@@ -173,23 +180,31 @@ if audio_bytes:
     # Naturalness Evaluation
     naturalness_evaluation, naturalness_score = evaluate_naturalness(transcription)
     # Save Results to Database
-    save_results_to_coda(
-        st.session_state['username'], 
-        prompt.get('prompt_code', ''), 
-        transcription, 
-        duration_in_minutes, 
-        fluency_score, 
-        vocabulary_score, 
-        syntax_score, 
-        communication_score, 
-        total_lemmas, 
-        unique_lemmas, 
-        wpm, 
-        syntax_evaluation, 
-        communication_evaluation, 
-        naturalness_evaluation
-    )
-    st.success("Résultats enregistrés avec succès dans l'application")
+    # Add here the dynamic analysis based on the users skills. Each user's conversation has one or many skills
+    # The skills are provided from the user's skills table in Coda
+    skills_analysis = dynamic_skills_analysis(transcription)
+
+    try:
+        save_results_to_coda(
+            st.session_state['username'], 
+            prompt.get('prompt_code', ''), 
+            transcription, 
+            duration_in_minutes, 
+            fluency_score, 
+            vocabulary_score, 
+            syntax_score, 
+            communication_score, 
+            total_lemmas, 
+            unique_lemmas, 
+            wpm, 
+            syntax_evaluation, 
+            communication_evaluation, 
+            naturalness_evaluation
+        )
+        st.success("Results successfully saved to the application")
+    except Exception as e:
+        st.error(f"Error saving results: {str(e)}")
+        print(f"Error saving results to Coda: {str(e)}")
     # Display results
     display_circular_progress(fluency_score, wpm, 
                             int(syntax_score), 
@@ -214,5 +229,3 @@ if audio_bytes:
                         communication_evaluation)
     delete_old_audio_files()
 
-if __name__ == "__main__":
-    main()
