@@ -77,9 +77,9 @@ def calculate_vocabulary_richness(text):
 def analyze_lemmas_and_frequency(transcription, duration_in_minutes):
     st.write("Performing general text analysis")
 
-    paragraph = transcription.text
+
     # Tokenize by splitting the paragraph into words (basic tokenization)
-    words = [word for word in paragraph.split() if word.isalpha()]
+    words = [word for word in transcription.split() if word.isalpha()]
     
     total_lemmas = len(words)
     unique_lemmas = len(set(words))
@@ -91,7 +91,7 @@ def analyze_lemmas_and_frequency(transcription, duration_in_minutes):
     # Calculate Scores
     fluency_score = calculate_fluency_score(wpm)
     # TODO: next function is dupplicating code
-    vocabulary_richness_score = calculate_vocabulary_richness(paragraph)
+    vocabulary_richness_score = calculate_vocabulary_richness(transcription)
 
     return {
         'total_lemmas': total_lemmas,

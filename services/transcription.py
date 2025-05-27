@@ -18,12 +18,18 @@ def convert_audio_to_wav(audio_bytes):
 
 def get_audio_duration(audio_bytes):
     try:
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        duration_in_minutes = len(audio_segment) / (1000 * 60)  # Convert milliseconds to minutes
-        return duration_in_minutes
+        # Handle both BytesIO and bytes
+        if hasattr(audio_bytes, "getvalue"):
+            audio_bytes = audio_bytes.getvalue()
+        else:
+            audio_bytes = audio_bytes
+        with io.BytesIO(audio_bytes) as audio_bio:
+            audio_segment = AudioSegment.from_file(audio_bio, format="wav")
+            duration_in_minutes = len(audio_segment) / (1000 * 60)  # Convert milliseconds to minutes
+            return duration_in_minutes
     except Exception as e:
         print(f"Error calculating audio duration: {e}")
-        return 0.1  # Default duration if error occurs
+        return None
 
 
 def transcribe_audio(openai_api_key, audio_bio, language=None):
@@ -34,7 +40,7 @@ def transcribe_audio(openai_api_key, audio_bio, language=None):
             file=audio_bio,
             language=language
         )
-        return result
+        return result.text
     except Exception as e:
         print(f"Error transcribing audio: {e}")
         return None

@@ -1,22 +1,34 @@
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
-from .base import CodaModel
 
-class User(CodaModel):
-    TABLE_ID = "grid-qqR8f6GhaA"  # Update if your table ID is different
-    COLS = {
-        "username": "username",
-        "user_first_name": "user_first_name",
-        "user_last_name": "user_last_name",
-    }
+@dataclass
+class User:
+    """Pure data structure representing a user in the system."""
+    username: str
+    user_id: str
+    user_email: str
+    user_first_name: str
+    user_last_name: str
+    user_password: str
+    user_data_joined: Optional[str] = None
+    user_level: Optional[str] = None
+    user_challenges: Optional[str] = None
+    prompt_table_id: Optional[str] = None
+    user_document_id: Optional[str] = None
 
-    def __init__(
-        self,
-        username: str,
-        user_first_name: str,
-        user_last_name: str,
-        _row_id: Optional[str] = None
-    ):
-        self.username = username
-        self.user_first_name = user_first_name
-        self.user_last_name = user_last_name
-        self._row_id = _row_id
+    @property
+    def full_name(self) -> str:
+        """Returns the user's full name."""
+        return f"{self.user_first_name} {self.user_last_name}"
+
+    @property
+    def has_user_document(self) -> bool:
+        """Returns whether the user has a personal document."""
+        return bool(self.user_document_id)
+
+    @property
+    def has_prompt_table(self) -> bool:
+        """Returns whether the user has a prompt table."""
+        return bool(self.prompt_table_id)
+
