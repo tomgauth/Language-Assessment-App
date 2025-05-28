@@ -136,6 +136,18 @@ def main():
                 # Generate a unique session ID for this prompt session
                 session_id = str(uuid.uuid4())
                 
+                # Initialize progress bar
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+                
+                # Display the prompt text for reference
+                st.subheader("📝 Original Prompt")
+                st.write(prompt_row['prompt_text'])
+                
+                # Update progress - Starting transcription (10%)
+                progress_text.text("🎙️ Transcribing your audio...")
+                progress_bar.progress(10)
+                
                 # Transcribe the audio
                 transcription = transcribe_audio(openai_api_key, audio_data)
                 
@@ -143,10 +155,19 @@ def main():
                 duration = get_audio_duration(audio_data)  
 
                 if transcription and duration:
+                    # Update progress - Transcription complete (30%)
+                    progress_text.text("✅ Transcription complete! Analyzing your response...")
+                    progress_bar.progress(30)
+                    
                     st.subheader("Transcription")
                     st.text_area("Transcription", transcription, height=200, help="This is the transcribed text from your audio input.")
                 else:
                     st.error("Failed to transcribe or get audio duration")
+                    return
+
+                # Update progress - Starting WPM analysis (40%)
+                progress_text.text("📊 Calculating speaking rate and vocabulary...")
+                progress_bar.progress(40)
 
                 # Calculate WPM                
                 analysis_results = analyze_lemmas_and_frequency(transcription, duration)
@@ -156,6 +177,10 @@ def main():
                 vocabulary_score = analysis_results['vocabulary_score']
                 total_lemmas = analysis_results['total_lemmas']
                 unique_lemmas = analysis_results['unique_lemmas']
+                
+                # Update progress - WPM analysis complete (50%)
+                progress_text.text("✅ Speaking rate calculated! Analyzing skills...")
+                progress_bar.progress(50)
                 
                 # Now fetch the skills and display them
                 skills_id_str = prompt_row['conversation_skills_id']
@@ -218,6 +243,10 @@ def main():
                             else:
                                 st.success("Skill is properly defined.")
 
+                # Update progress - Skills fetched (60%)
+                progress_text.text("🎯 Evaluating your skills...")
+                progress_bar.progress(60)
+
                 # Analyze the skills
                 if skills_list:
                     skills_analysis_results = dynamic_skills_analysis(
@@ -225,6 +254,10 @@ def main():
                         skills=[{'name': skill['skill_name'], 'prompt': skill['skill_ai_prompt']} for skill in skills_list],
                         openai_api_key=openai_api_key
                     )
+
+                # Update progress - Skills analyzed (80%)
+                progress_text.text("💾 Saving your results...")
+                progress_bar.progress(80)
 
                 # Display analysis results
                 with st.sidebar:
@@ -343,6 +376,13 @@ def main():
                             skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in skill_row.items()])
                     
                     st.success(f"Results successfully saved! Session ID: {session_id}")
+                    
+                    # Update progress - Complete (100%)
+                    progress_text.text("✨ Analysis complete!")
+                    progress_bar.progress(100)
+                    
+                    # Show balloons to celebrate completion
+                    st.balloons()
                     
                     # Debug info
                     with st.sidebar:
