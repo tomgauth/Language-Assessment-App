@@ -1,242 +1,422 @@
 import streamlit as st
-from services.transcription import whisper_stt, convert_audio_to_wav, transcribe_audio
-from services.nlp_analysis import analyze_lemmas_and_frequency
-from services.ai_analysis import evaluate_naturalness, evaluate_syntax, evaluate_communication
-from services.coda_db import save_results_to_coda
-from services.export_pdf import export_results_to_pdf
-from services.delete_audio_files import delete_old_audio_files
-from services.dynamic_skills_analysis import dynamic_skills_analysis
-from frontend_elements import display_circular_progress, display_data_table, top_text, display_evaluations
-from models.coda_service import CodaService
-from dotenv import load_dotenv
 import os
-import time
-import random
+import datetime
+import uuid
+from dotenv import load_dotenv
+from codaio import Coda, Document, Table, Cell
 import pandas as pd
+from services.transcription import transcribe_audio, get_audio_duration
+from services.dynamic_skills_analysis import dynamic_skills_analysis
+from frontend_elements import CircularProgress, get_color
+from services.nlp_analysis import analyze_lemmas_and_frequency
+import ast
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Coda client
+coda = Coda(os.getenv("CODA_API_KEY"))
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+def get_prompts_table_rows(doc_id: str, table_id: str):
+    doc = Document(doc_id, coda=coda)
+    table = doc.get_table(table_id)
+    rows = table.rows()
+    # Each row is a codaio Row object; convert to dict for easier access
+    return [row.to_dict() for row in rows]
 
 def main():
-    # Load environment variables
-    load_dotenv()
-    CODA_API_KEY = os.getenv("CODA_API_KEY")
-    CODA_DOC_ID = os.getenv("CODA_MAIN_DOC_ID")
-    CODA_MAIN_USERS_TABLE_ID = os.getenv("CODA_MAIN_USERS_TABLE_ID")
+    st.title("Language Assessment MVP")
+    
+    # Step 1: Get document and table IDs
+    username = st.text_input("Enter your username")
 
-    # Initialize Coda Service
-    coda_service = CodaService(CODA_API_KEY, CODA_DOC_ID)
-
-    # Table IDs will be fetched dynamically based on relational traversal
-    # from the Main Users Table. The following IDs will be determined at runtime:
-    # USERS_TABLE_ID, CHALLENGES_TABLE_ID, CONV_TABLE_ID, TOPICS_TABLE_ID,
-    # PROMPTS_TABLE_ID, SKILLS_TABLE_ID
-    # These will be retrieved by querying the Coda database for the user's
-    # conversations and related tables.
-
-    # Helper: get column mapping for a table
-    schema_cache = {}
-    def get_table_mapping(table_id):
-        if table_id not in schema_cache:
-            schema = coda_service.get_table_schema(table_id)
-            schema_cache[table_id] = {col['id']: col['name'] for col in schema['columns']}
-        return schema_cache[table_id]
-
-    def map_rows(rows, mapping):
-        return [
-            {mapping.get(k, k): v for k, v in dict(row.values).items()} | {"_row_id": row.id} for row in rows
-        ]
-
-    # --- Step 1: Username input and validation ---
-    if 'username_validated' not in st.session_state:
-        st.session_state['username_validated'] = False
-    if 'selected_conversation' not in st.session_state:
-        st.session_state['selected_conversation'] = None
-    if 'conversation_validated' not in st.session_state:
-        st.session_state['conversation_validated'] = False
-
-    st.set_page_config(
-        page_title="Fluency Analyzer",
-        page_icon="🎯",
-        layout="wide"
-    )
-    st.title("🎯 Fluency Analyzer")
-
-    # Step 1: Username
-    if not st.session_state['username_validated']:
-        username = st.text_input("Entrez votre nom d'utilisateur :", key="username_input")
-        if st.button("Valider le nom d'utilisateur"):
-            users_mapping = get_table_mapping(USERS_TABLE_ID)
-            users = coda_service.get_rows(USERS_TABLE_ID)
-            users_data = map_rows(users, users_mapping)
-            user = next((u for u in users_data if u.get('username') == username), None)
-            if not user:
-                st.error("Nom d'utilisateur introuvable. Veuillez vérifier ou vous inscrire.")
-                st.stop()
-            st.session_state['username'] = username
-            st.session_state['user_id'] = user['_row_id']
-            st.session_state['username_validated'] = True
-            st.rerun()
-        st.stop()
-
-    # Step 2: Conversation selection
-    user_id = st.session_state['user_id']
-    user_id = "i-xaPqAx4SOQ"
-    challenges_mapping = get_table_mapping(CHALLENGES_TABLE_ID)
-    challenges = coda_service.get_rows(CHALLENGES_TABLE_ID)
-    challenges_data = map_rows(challenges, challenges_mapping)
-    user_challenges = [c for c in challenges_data if c.get('user_id') == user_id]
-
-    conv_mapping = get_table_mapping(CONV_TABLE_ID)
-    conversations = coda_service.get_rows(CONV_TABLE_ID)
-    conversations_data = map_rows(conversations, conv_mapping)
-    challenge_ids = [c['_row_id'] for c in user_challenges]
-    user_conversations = [c for c in conversations_data if c.get('challenge_id') in challenge_ids]
-
-    if not st.session_state['conversation_validated']:
-        if not user_conversations:
-            st.error("Aucune conversation trouvée pour cet utilisateur.")
-            st.stop()
-        conversation_options = {c.get('conversation_name', f"Conversation {i}"): c for i, c in enumerate(user_conversations)}
-        selected_conversation_name = st.selectbox("Choisissez une conversation à pratiquer :", list(conversation_options.keys()), key="conversation_select")
-        if st.button("Valider la conversation"):
-            st.session_state['selected_conversation'] = conversation_options[selected_conversation_name]
-            st.session_state['conversation_validated'] = True
-            st.rerun()
-        st.stop()
-
-    # Step 3: Prompt selection and fluency analyzer interface
-    selected_conversation = st.session_state['selected_conversation']
-    conversation_id = selected_conversation['_row_id']
-
-    # Topics for this conversation
-    topics_mapping = get_table_mapping(TOPICS_TABLE_ID)
-    topics = coda_service.get_rows(TOPICS_TABLE_ID)
-    topics_data = map_rows(topics, topics_mapping)
-    conversation_topics = [t for t in topics_data if t.get('conversation_id') == conversation_id]
-
-    if not conversation_topics:
-        st.error("Aucun sujet trouvé pour cette conversation.")
-        st.stop()
-
-    # Select a topic (if multiple)
-    topic_options = {t.get('topic_name', f"Sujet {i}"): t for i, t in enumerate(conversation_topics)}
-    selected_topic_name = st.selectbox("Choisissez un sujet à pratiquer :", list(topic_options.keys()), key="topic_select")
-    selected_topic = topic_options[selected_topic_name]
-    topic_id = selected_topic['_row_id']
-
-    # Get the skills for the selected topic
-    skills_mapping = get_table_mapping(SKILLS_TABLE_ID)
-    skills = coda_service.get_rows(SKILLS_TABLE_ID)
-    skills_data = map_rows(skills, skills_mapping)
-    topic_skills = [s for s in skills_data if s.get('conversation_id') == conversation_id]
-
-    st.write(topic_skills)
-
-    # Get a random prompt for the selected topic
-    def get_random_prompt_for_topic(topic_id):
-        prompts_mapping = get_table_mapping(PROMPTS_TABLE_ID)
-        prompts = coda_service.get_rows(PROMPTS_TABLE_ID)
-        prompts_data = map_rows(prompts, prompts_mapping)
-        topic_prompts = [p for p in prompts_data if p.get('topic_id') == topic_id]
-        if not topic_prompts:
-            return None
-        return random.choice(topic_prompts)
-
-    prompt = get_random_prompt_for_topic(topic_id)
-    if not prompt:
-        st.error("Aucun prompt trouvé pour ce sujet.")
-        st.stop()
-
-    # Display prompt and context
-    st.header("💡 Prompt")
-    st.write(f"**Prompt:** {prompt.get('text', 'No prompt text available')}")
-    st.write(f"**Context:** {prompt.get('context', 'No context available')}")
-    if prompt.get('audio_url'):
-        st.audio(prompt['audio_url'])
-
-    # Record audio
-    st.header("🎤 Record your answer")
-    audio_uploaded = st.audio_input("🎤 Record your answer here: ")
-    if not audio_uploaded:
-        st.error("No audio uploaded. Please record your answer.")
-        st.stop()
-    if audio_uploaded is not None:
-        audio_bytes = audio_uploaded.read()
-        audio_bio = convert_audio_to_wav(audio_bytes)
-        transcription = transcribe_audio(os.getenv("OPENAI_API_KEY"), audio_bio) # this returns a string
-        duration_in_minutes = len(audio_bytes) / (16000 * 2) / 60
-        st.write("Transcription:")
-        st.write(transcription)
-        # Analyze lemmas and frequency (20%)
-        analysis_result = analyze_lemmas_and_frequency(
-            transcription, 
-            duration_in_minutes=duration_in_minutes
-        )
-        total_lemmas = analysis_result['total_lemmas']
-        unique_lemmas = analysis_result['unique_lemmas']        
-        fluency_score = analysis_result['fluency_score']
-        vocabulary_score = analysis_result['vocabulary_score']
-        wpm = analysis_result['wpm']
-        # Syntax Evaluation
-        syntax_evaluation, syntax_score = evaluate_syntax(transcription)
-        # Communication Evaluation
-        communication_evaluation, communication_score = evaluate_communication(transcription)
-        # Naturalness Evaluation
-        naturalness_evaluation, naturalness_score = evaluate_naturalness(transcription)
-        # Save Results to Database
-        # Add here the dynamic analysis based on the users skills. Each user's conversation has one or many skills
-        # The skills are provided from the user's skills table in Coda
-        skills_agent_prompts = [skill.skill_agent_prompt for skill in topic_skills]
-        skills_analysis = dynamic_skills_analysis(transcription, skills_agent_prompts)
-
-        try:
-            save_results_to_coda(
-                st.session_state['username'], 
-                prompt.get('prompt_code', ''), 
-                transcription, 
-                duration_in_minutes, 
-                fluency_score, 
-                vocabulary_score, 
-                syntax_score, 
-                communication_score, 
-                total_lemmas, 
-                unique_lemmas, 
-                wpm, 
-                syntax_evaluation, 
-                communication_evaluation, 
-                naturalness_evaluation
+    if username:
+        # Fetch the user-specific document and table IDs from the central table
+        central_doc_id = "jPJTMi7bJR"
+        central_table_id = "grid-qqR8f6GhaA"
+        central_rows = get_prompts_table_rows(central_doc_id, central_table_id)
+        
+        # Find the row matching the username
+        user_row = next((row for row in central_rows if row['username'] == username), None)
+        
+        if user_row:
+            doc_id = user_row['user_document_id']
+            table_id = user_row['prompt_table_id']
+            user_prompt_session_table = user_row['user_prompt_session_table']
+            user_skill_session_table = user_row['user_skill_session_table']  # Get the skill session table ID
+            user_skills_table = user_row['user_skills_table']
+        else:
+            st.warning("Username not found. Please check your username.")
+            return
+    else:
+        st.warning("Please enter your username.")
+        return
+    
+    if not doc_id or not table_id:
+        st.warning("Please enter both Document ID and Table ID")
+        return
+    
+    try:
+        # Step 2: Display topics
+        rows = get_prompts_table_rows(doc_id, table_id)
+        if st.sidebar.checkbox("Show Rows"):
+            st.sidebar.write(rows)
+        
+        # Extract unique topics
+        topics = list(set(row['topic'] for row in rows))
+        selected_topic = st.selectbox("Select a topic", topics)
+        
+        if selected_topic:
+            # Filter prompts by selected topic
+            topic_prompts = [row for row in rows if row['topic'] == selected_topic]
+            
+            # Select a random prompt from the filtered list
+            import random
+            prompt_row = random.choice(topic_prompts)
+            
+            # Debug: Analyze prompt_row structure
+            with st.sidebar:
+                st.write("## Debug: Prompt Row Structure")
+                st.write("### All Fields in prompt_row:")
+                for key, value in prompt_row.items():
+                    st.write(f"Field: {key}")
+                    st.write(f"Type: {type(value)}")
+                    st.write(f"Value: {value}")
+                    st.write("---")
+                
+                # Specifically analyze the skills data
+                st.write("### Skills Data Analysis")
+                if 'stri_json_skills_prompts' in prompt_row:
+                    st.write("Raw skills string:")
+                    st.write(prompt_row['stri_json_skills_prompts'])
+                    try:
+                        parsed_skills = ast.literal_eval(prompt_row['stri_json_skills_prompts'])
+                        st.write("Parsed skills structure:")
+                        st.write(f"Type: {type(parsed_skills)}")
+                        st.write("Content:")
+                        st.write(parsed_skills)
+                    except Exception as e:
+                        st.error(f"Failed to parse skills: {e}")
+                else:
+                    st.warning("No 'stri_json_skills_prompts' field found in prompt_row")
+            
+            st.sidebar.write("prompt_row:")
+            st.sidebar.write(prompt_row)
+            
+            # Display context
+            st.subheader("🏘️ Context of the situation:")
+            st.write(prompt_row['prompt_context'])
+            
+            # Display audio if available            
+            audio_url = prompt_row['prompt_audio_ulr_txt']
+            if audio_url and not pd.isna(audio_url):
+                st.audio(audio_url)
+            else:
+                st.warning("No audio available for this prompt")
+            
+            # Step 5 & 6: Record user's voice
+            st.subheader("🎤 Record Your Response")
+            
+            audio_data = st.audio_input(
+                label="Click to record",
+                key=None,
+                help=None,
+                on_change=None,
+                args=None,
+                kwargs=None,
+                disabled=False,
+                label_visibility="visible"
             )
-            st.success("Results successfully saved to the application")
-        except Exception as e:
-            st.error(f"Error saving results: {str(e)}")
-            print(f"Error saving results to Coda: {str(e)}")
-        # Display results
-        display_circular_progress(fluency_score, wpm, 
-                                int(syntax_score), 
-                                int(vocabulary_score),
-                                int(communication_score),
-                                int(naturalness_score),
-                                )
-        # Display circular progress for each skill score
-        if skills_analysis:
-            for skill_result in skills_analysis:
-                if skill_result["score"] is not None:
-                    st.write(f"### {skill_result['skill']} Score")
-                    display_circular_progress(int(skill_result["score"]))
-        display_evaluations(naturalness_evaluation, syntax_evaluation, communication_evaluation)
-        display_data_table(vocabulary_score, total_lemmas, unique_lemmas, fluency_score, wpm)
-        export_results_to_pdf(st.session_state['username'], 
-                            transcription, 
-                            vocabulary_score, 
-                            total_lemmas, 
-                            unique_lemmas, 
-                            fluency_score, 
-                            wpm, 
-                            syntax_score, 
-                            communication_score, 
-                            prompt.get('text', ''), 
-                            naturalness_evaluation, 
-                            syntax_evaluation, 
-                            communication_evaluation)
-        delete_old_audio_files()
+            
+            
+        if audio_data is not None:            
+            # Save the recording (optional)
+            if st.button("Confirm"):                
+                # Generate a unique session ID for this prompt session
+                session_id = str(uuid.uuid4())
+                
+                # Initialize progress bar
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+                
+                # Display the prompt text for reference
+                st.subheader("📝 Original Prompt")
+                st.write(prompt_row['prompt_text'])
+                
+                # Update progress - Starting transcription (10%)
+                progress_text.text("🎙️ Transcribing your audio...")
+                progress_bar.progress(10)
+                
+                # Transcribe the audio
+                transcription = transcribe_audio(openai_api_key, audio_data)
+                
+                # Get audio duration
+                duration = get_audio_duration(audio_data)  
+
+                if transcription and duration:
+                    # Update progress - Transcription complete (30%)
+                    progress_text.text("✅ Transcription complete! Analyzing your response...")
+                    progress_bar.progress(30)
+                    
+                    st.subheader("Transcription")
+                    st.text_area("Transcription", transcription, height=200, help="This is the transcribed text from your audio input.")
+                else:
+                    st.error("Failed to transcribe or get audio duration")
+                    return
+
+                # Update progress - Starting WPM analysis (40%)
+                progress_text.text("📊 Calculating speaking rate and vocabulary...")
+                progress_bar.progress(40)
+
+                # Calculate WPM                
+                analysis_results = analyze_lemmas_and_frequency(transcription, duration)
+                wpm = analysis_results['wpm']
+                wpm_score = min(round(wpm), 100)
+                fluency_score = analysis_results['fluency_score']
+                vocabulary_score = analysis_results['vocabulary_score']
+                total_lemmas = analysis_results['total_lemmas']
+                unique_lemmas = analysis_results['unique_lemmas']
+                
+                # Update progress - WPM analysis complete (50%)
+                progress_text.text("✅ Speaking rate calculated! Analyzing skills...")
+                progress_bar.progress(50)
+                
+                # Now fetch the skills and display them
+                skills_id_str = prompt_row['conversation_skills_id']
+                
+                # Create a default comprehension prompt
+                comprehension_prompt = {
+                    'skill_name': 'comprehension',
+                    'skill_ai_prompt': 'evaluate the relevancy of the answer provided given the question was: '
+                }
+                comprehension_prompt['skill_ai_prompt'] += "Question: " + prompt_row['prompt_text'] + ". And context: " + prompt_row['prompt_context']
+
+                # Get skills from the Skills table
+                skills_list = []
+                if skills_id_str:
+                    # Get the skills table
+                    user_doc = Document(doc_id, coda=coda)
+                    skills_table = user_doc.get_table(user_skills_table)
+                    
+                    # Split the IDs and fetch each skill
+                    skill_ids = [id_str.strip() for id_str in skills_id_str.split(',') if id_str.strip()]
+                    
+                    # Debug info for skills fetching
+                    with st.sidebar:
+                        show_debug_info = st.checkbox("Show Debug: Skills Fetch", value=False)
+                        if show_debug_info:
+                            st.write("## Debug: Skills Fetch")
+                            st.write("Skill IDs from prompt:", skill_ids)
+                    
+                    # Fetch each skill from the table
+                    for skill_id in skill_ids:
+                        try:
+                            # Find the row with matching skill_id
+                            skill_row = next((row for row in skills_table.rows() 
+                                           if str(row.to_dict().get('skill_id')) == skill_id), None)
+                            if skill_row:
+                                skill_data = skill_row.to_dict()
+                                skills_list.append({
+                                    'skill_name': skill_data['skill_name'],
+                                    'skill_ai_prompt': skill_data['skill_ai_prompt']
+                                })
+                                if show_debug_info:
+                                    st.write(f"Found skill {skill_id}:", skill_data)
+                            else:
+                                st.warning(f"Skill ID {skill_id} not found in skills table")
+                        except Exception as e:
+                            st.error(f"Error fetching skill {skill_id}: {e}")
+
+                # Add the comprehension prompt to the list of skills
+                skills_list.append(comprehension_prompt)
+
+                # Debug info for final skills list
+                with st.sidebar:
+                    if show_debug_info:
+                        st.write("## Final Skills List")
+                        for idx, skill in enumerate(skills_list):
+                            st.write(f"### Skill {idx + 1}: {skill.get('skill_name', 'Unnamed Skill')}")
+                            st.write(f"Prompt: {skill.get('skill_ai_prompt', 'No Prompt Provided')}")
+                            if not skill.get('skill_name') or not skill.get('skill_ai_prompt'):
+                                st.error("Skill is missing a name or prompt.")
+                            else:
+                                st.success("Skill is properly defined.")
+
+                # Update progress - Skills fetched (60%)
+                progress_text.text("🎯 Evaluating your skills...")
+                progress_bar.progress(60)
+
+                # Analyze the skills
+                if skills_list:
+                    skills_analysis_results = dynamic_skills_analysis(
+                        text=transcription,
+                        skills=[{'name': skill['skill_name'], 'prompt': skill['skill_ai_prompt']} for skill in skills_list],
+                        openai_api_key=openai_api_key
+                    )
+
+                # Update progress - Skills analyzed (80%)
+                progress_text.text("💾 Saving your results...")
+                progress_bar.progress(80)
+
+                # Display analysis results
+                with st.sidebar:
+                    st.write("## Debug: Skills Analysis Results")
+                    for idx, result in enumerate(skills_analysis_results):
+                        st.write(f"### Skill {idx + 1}: {result['skill']}")
+                        st.write(f"Score: {result['score']}")
+                        st.write(f"Feedback: {result['feedback']}")
+                    
+                st.write("## Analysis Scores")
+
+                # Display scores in columns
+                num_skills = len(skills_analysis_results)
+                total_columns = num_skills + 1  # +1 for the WPM
+                columns = st.columns(total_columns)
+
+                # Display WPM
+                with columns[0]:
+                    fluency_progress = CircularProgress(
+                        label="Fluency (words per minute score)",
+                        value=wpm_score,
+                        key="fluency_progress",
+                        size="medium",
+                        color=get_color(wpm_score),
+                        track_color="lightgray"
+                    )
+                    fluency_progress.st_circular_progress()
+                    st.write(f"{wpm_score} WPM Score")
+
+                # Display skill scores
+                for idx, result in enumerate(skills_analysis_results):
+                    with columns[idx + 1]:
+                        skill_progress = CircularProgress(
+                            label=result['skill'][:50],
+                            value=result['score'],
+                            key=f"skill_progress_{idx}",
+                            size="medium",
+                            color=get_color(result['score']),
+                            track_color="lightgray"
+                        )
+                        skill_progress.st_circular_progress()
+                        st.write(f"Score: {result['score']}")
+                        st.write(f"Feedback: {result['feedback']}")
+                else:
+                    st.info("No skills found or failed to parse skills.")
+
+                # Prepare data for saving
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d, %I:%M:%S %p")
+                prompt = prompt_row['prompt_text']
+                user_transcription = transcription
+                answer_duration = duration
+
+                try:
+                    # Save Prompt Session
+                    user_doc = Document(doc_id, coda=coda)
+                    prompt_table = user_doc.get_table(user_prompt_session_table)
+                    
+                    # Create the prompt session row
+                    prompt_session_row = {
+                        "session_id": session_id,
+                        "date_time": current_time,
+                        "prompt": prompt,
+                        "user_transcription": user_transcription,
+                        "answer_duration": answer_duration
+                    }
+                    
+                    # Insert the prompt session
+                    prompt_table.upsert_row([Cell(column=key, value_storage=value) for key, value in prompt_session_row.items()])
+                    
+                    # Save Skill Sessions
+                    skill_table = user_doc.get_table(user_skill_session_table)
+                    
+                    # Debug: Get and display the skill session table schema
+                    with st.sidebar:
+                        st.write("## Debug: Skill Session Table Schema")
+                        try:
+                            schema = coda.get_table_schema(user_skill_session_table)
+                            st.write("### Columns in Skill Session Table:")
+                            for col in schema['columns']:
+                                st.write(f"- {col['name']} (ID: {col['id']})")
+                        except Exception as e:
+                            st.error(f"Error getting table schema: {e}")
+                    
+                    # Add WPM as a skill session
+                    wpm_skill_row = {
+                        "PromptSession": session_id,
+                        "date_time": current_time,
+                        "Skill": "Fluency (WPM)",
+                        "skill_score": wpm_score,
+                        "skill_feedback": f"User spoke at {wpm} words per minute"
+                    }
+                    
+                    # Debug: Show the row we're trying to insert
+                    with st.sidebar:
+                        st.write("### WPM Skill Row to Insert:")
+                        st.write(wpm_skill_row)
+                    
+                    skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in wpm_skill_row.items()])
+                    
+                    # Add other skill sessions
+                    for result in skills_analysis_results:
+                        if result['skill'] != 'comprehension':  # Skip comprehension as it's already added
+                            skill_row = {
+                                "PromptSession": session_id,
+                                "date_time": current_time,
+                                "Skill": result['skill'],
+                                "skill_score": result['score'],
+                                "skill_feedback": result['feedback']
+                            }
+                            
+                            # Debug: Show each skill row we're trying to insert
+                            with st.sidebar:
+                                st.write(f"### Skill Row to Insert ({result['skill']}):")
+                                st.write(skill_row)
+                            
+                            skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in skill_row.items()])
+                    
+                    st.success(f"Results successfully saved! Session ID: {session_id}")
+                    
+                    # Update progress - Complete (100%)
+                    progress_text.text("✨ Analysis complete!")
+                    progress_bar.progress(100)
+                    
+                    # Show balloons to celebrate completion
+                    st.balloons()
+                    
+                    # Debug info
+                    with st.sidebar:
+                        st.write("## Debug: Saved Data")
+                        st.write("### Prompt Session")
+                        st.write(prompt_session_row)
+                        st.write("### Skill Sessions")
+                        st.write("WPM Skill:", wpm_skill_row)
+                        for result in skills_analysis_results:
+                            if result['skill'] != 'comprehension':
+                                st.write(f"{result['skill']}:", {
+                                    "PromptSession": session_id,
+                                    "date_time": current_time,
+                                    "Skill": result['skill'],
+                                    "skill_score": result['score'],
+                                    "skill_feedback": result['feedback']
+                                })
+                except Exception as e:
+                    st.error(f"Error saving results: {str(e)}")
+                    # Show more detailed error info in debug mode
+                    with st.sidebar:
+                        st.write("## Debug: Error Details")
+                        st.write(f"Error type: {type(e)}")
+                        st.write(f"Error message: {str(e)}")
+                        import traceback
+                        st.write("Full traceback:")
+                        st.write(traceback.format_exc())
+    
+    except Exception as e:
+        import traceback
+        tb_str = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        st.error(f"An error occurred: {str(e)}")
+        st.error("Traceback details:")
+        st.error(tb_str)
 
 if __name__ == "__main__":
-    main()
+    main() 
