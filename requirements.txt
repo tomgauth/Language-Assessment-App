@@ -177,7 +177,7 @@ SpeechRecognition==3.10.4
 srsly==2.4.8
 st-circular-progress==0.3.9
 stack-data==0.6.3
-streamlit==1.38.0
+streamlit==1.45.1
 streamlit-webrtc==0.47.9
 streamlit-mic-recorder==0.0.8
 sympy==1.12
@@ -211,9 +211,3 @@ wrapt==1.16.0
 yarl==1.12.1
 youtube-dl==2021.12.17
 zh-core-web-md @ https://github.com/explosion/spacy-models/releases/download/zh_core_web_md-3.7.0/zh_core_web_md-3.7.0-py3-none-any.whl#sha256=a528dbbcf7f323718be4b523559840dc850303046e25a62f9a1049b7ab9f9e68
-streamlit==1.45.1
-streamlit-webrtc==0.47.9
-streamlit_mic_recorder==0.0.8
-streamlit==1.45.1
-streamlit-webrtc==0.47.9
-streamlit_mic_recorder==0.0.8
