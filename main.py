@@ -109,7 +109,8 @@ def main():
             st.write(prompt_row['prompt_context'])
             
             # Display audio if available            
-            audio_url = prompt_row['prompt_audio_ulr_txt']
+            # audio_url = prompt_row['prompt_audio_ulr_txt']
+            audio_url = prompt_row['eleven_labs_url']
             if audio_url and not pd.isna(audio_url):
                 st.audio(audio_url)
             else:
@@ -252,6 +253,9 @@ def main():
                     skills_analysis_results = dynamic_skills_analysis(
                         text=transcription,
                         skills=[{'name': skill['skill_name'], 'prompt': skill['skill_ai_prompt']} for skill in skills_list],
+                        audio_duration=duration,
+                        question=prompt_row['prompt_text'],
+                        context=prompt_row['prompt_context'],
                         openai_api_key=openai_api_key
                     )
 
