@@ -26,6 +26,14 @@ def get_prompts_table_rows(doc_id: str, table_id: str):
     return [row.to_dict() for row in rows]
 
 def main():
+    # Configure the page to be wider
+    st.set_page_config(
+        page_title="Language Assessment MVP",
+        page_icon="🎤",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
+    
     st.title("Language Assessment MVP")
     
     # Step 1: Get document and table IDs
@@ -231,39 +239,58 @@ def main():
 
                 st.write("## Analysis Scores")
 
-                # Display scores in columns
-                num_skills = len(skills_analysis_results)
-                total_columns = num_skills + 1  # +1 for the WPM
-                columns = st.columns(total_columns)
+                # Create a list of all scores to display (WPM + skills)
+                all_scores = []
+                
+                # Add WPM score
+                all_scores.append({
+                    'name': 'Fluency (WPM)',
+                    'score': wpm_score,
+                    'feedback': f"User spoke at {wpm} words per minute",
+                    'color': get_color(wpm_score)
+                })
+                
+                # Add skill scores
+                for result in skills_analysis_results:
+                    all_scores.append({
+                        'name': result['skill'],
+                        'score': result['score'],
+                        'feedback': result['feedback'],
+                        'color': get_color(result['score'])
+                    })
 
-                # Display WPM
-                with columns[0]:
-                    fluency_progress = CircularProgress(
-                        label="Fluency (words per minute score)",
-                        value=wpm_score,
-                        key="fluency_progress",
-                        size="medium",
-                        color=get_color(wpm_score),
-                        track_color="lightgray"
-                    )
-                    fluency_progress.st_circular_progress()
-                    st.write(f"{wpm_score} WPM Score")
-
-                # Display skill scores
-                for idx, result in enumerate(skills_analysis_results):
-                    with columns[idx + 1]:
-                        skill_progress = CircularProgress(
-                            label=result['skill'][:50],
-                            value=result['score'],
-                            key=f"skill_progress_{idx}",
-                            size="medium",
-                            color=get_color(result['score']),
-                            track_color="lightgray"
-                        )
-                        skill_progress.st_circular_progress()
-                        st.write(f"Score: {result['score']}")
-                        st.write(f"Feedback: {result['feedback']}")
-                else:
+                # Display scores in rows of max 4
+                max_per_row = 4
+                for i in range(0, len(all_scores), max_per_row):
+                    row_scores = all_scores[i:i + max_per_row]
+                    cols = st.columns(len(row_scores))
+                    
+                    for j, score_data in enumerate(row_scores):
+                        with cols[j]:
+                            # Create a card-like container
+                            st.markdown("---")
+                            
+                            # Display the circular progress
+                            progress = CircularProgress(
+                                label=score_data['name'][:30] + ("..." if len(score_data['name']) > 30 else ""),
+                                value=score_data['score'],
+                                key=f"score_progress_{i}_{j}",
+                                size="medium",
+                                color=score_data['color'],
+                                track_color="lightgray"
+                            )
+                            progress.st_circular_progress()
+                            
+                            # Display score
+                            st.markdown(f"**Score: {score_data['score']}**")
+                            
+                            # Display collapsible feedback
+                            with st.expander("📝 View Feedback", expanded=False):
+                                st.write(score_data['feedback'])
+                            
+                            st.markdown("---")
+                
+                if not all_scores:
                     st.info("No skills found or failed to parse skills.")
 
                 # Prepare data for saving
