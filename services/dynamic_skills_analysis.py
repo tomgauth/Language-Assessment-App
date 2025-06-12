@@ -26,7 +26,7 @@ def dynamic_skills_analysis(
     client = OpenAI(api_key=openai_api_key)
     results = []
     for skill in skills:
-        prompt = skill['prompt'] + "| Transcription: " + text + "| Audio Duration: " + audio_duration + "| Question: " + question + "| Context: " + context
+        prompt = skill['prompt'] + "| Transcription: " + text + "| Audio Duration: " + str(audio_duration) + "| Question: " + question + "| Context: " + context
         response = client.chat.completions.create(
             model=model,
             messages=[
