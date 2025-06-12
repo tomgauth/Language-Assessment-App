@@ -69,13 +69,29 @@ def main():
             # Filter prompts by selected topic
             topic_prompts = [row for row in rows if row['topic'] == selected_topic]
             
-            # Select a random prompt from the filtered list
-            import random
-            prompt_row = random.choice(topic_prompts)
+            # Check if we need to select a new prompt (only if topic changed or no prompt stored)
+            topic_key = f"prompt_row_{selected_topic}"
+            if topic_key not in st.session_state or st.session_state.get('current_topic') != selected_topic:
+                # Select a random prompt from the filtered list
+                import random
+                st.session_state[topic_key] = random.choice(topic_prompts)
+                st.session_state['current_topic'] = selected_topic
+            
+            # Use the stored prompt
+            prompt_row = st.session_state[topic_key]
             
             # Display context
             st.subheader("🏘️ Context of the situation:")
             st.write(prompt_row['prompt_context'])
+            
+            # Add a button to get a new prompt
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button("🔄 New Prompt", help="Get a different random prompt for this topic"):
+                    # Clear the stored prompt for this topic to force a new selection
+                    if topic_key in st.session_state:
+                        del st.session_state[topic_key]
+                    st.rerun()
             
             # Display audio if available            
             audio_url = prompt_row['prompt_audio_url_txt']            
@@ -308,6 +324,12 @@ def main():
                     
                     # Show balloons to celebrate completion
                     st.balloons()
+                    
+                    # Clear session state to allow for a fresh start with a new prompt
+                    if topic_key in st.session_state:
+                        del st.session_state[topic_key]
+                    if 'current_topic' in st.session_state:
+                        del st.session_state['current_topic']
                     
                 except Exception as e:
                     st.error(f"Error saving results: {str(e)}")
