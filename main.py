@@ -60,8 +60,6 @@ def main():
     try:
         # Step 2: Display topics
         rows = get_prompts_table_rows(doc_id, table_id)
-        if st.sidebar.checkbox("Show Rows"):
-            st.sidebar.write(rows)
         
         # Extract unique topics
         topics = list(set(row['topic'] for row in rows))
@@ -75,42 +73,12 @@ def main():
             import random
             prompt_row = random.choice(topic_prompts)
             
-            # Debug: Analyze prompt_row structure
-            with st.sidebar:
-                st.write("## Debug: Prompt Row Structure")
-                st.write("### All Fields in prompt_row:")
-                for key, value in prompt_row.items():
-                    st.write(f"Field: {key}")
-                    st.write(f"Type: {type(value)}")
-                    st.write(f"Value: {value}")
-                    st.write("---")
-                
-                # Specifically analyze the skills data
-                st.write("### Skills Data Analysis")
-                if 'stri_json_skills_prompts' in prompt_row:
-                    st.write("Raw skills string:")
-                    st.write(prompt_row['stri_json_skills_prompts'])
-                    try:
-                        parsed_skills = ast.literal_eval(prompt_row['stri_json_skills_prompts'])
-                        st.write("Parsed skills structure:")
-                        st.write(f"Type: {type(parsed_skills)}")
-                        st.write("Content:")
-                        st.write(parsed_skills)
-                    except Exception as e:
-                        st.error(f"Failed to parse skills: {e}")
-                else:
-                    st.warning("No 'stri_json_skills_prompts' field found in prompt_row")
-            
-            st.sidebar.write("prompt_row:")
-            st.sidebar.write(prompt_row)
-            
             # Display context
             st.subheader("🏘️ Context of the situation:")
             st.write(prompt_row['prompt_context'])
             
             # Display audio if available            
-            # audio_url = prompt_row['prompt_audio_ulr_txt']
-            audio_url = prompt_row['eleven_labs_url']
+            audio_url = prompt_row['prompt_audio_url_txt']            
             if audio_url and not pd.isna(audio_url):
                 st.audio(audio_url)
             else:
@@ -118,6 +86,9 @@ def main():
             
             # Step 5 & 6: Record user's voice
             st.subheader("🎤 Record Your Response")
+            
+            # Add instructional text
+            st.info("💡 **Recording Tips:** Speak normally, as if this was a natural conversation. Don't read from any text or get help from reading materials. Try to listen to the audio only once and respond naturally. Avoid long silences at the beginning and end of your recording, as these are interpreted as drops in fluency.")
             
             audio_data = st.audio_input(
                 label="Click to record",
@@ -203,13 +174,6 @@ def main():
                     # Split the IDs and fetch each skill
                     skill_ids = [id_str.strip() for id_str in skills_id_str.split(',') if id_str.strip()]
                     
-                    # Debug info for skills fetching
-                    with st.sidebar:
-                        show_debug_info = st.checkbox("Show Debug: Skills Fetch", value=False)
-                        if show_debug_info:
-                            st.write("## Debug: Skills Fetch")
-                            st.write("Skill IDs from prompt:", skill_ids)
-                    
                     # Fetch each skill from the table
                     for skill_id in skill_ids:
                         try:
@@ -222,8 +186,6 @@ def main():
                                     'skill_name': skill_data['skill_name'],
                                     'skill_ai_prompt': skill_data['skill_ai_prompt']
                                 })
-                                if show_debug_info:
-                                    st.write(f"Found skill {skill_id}:", skill_data)
                             else:
                                 st.warning(f"Skill ID {skill_id} not found in skills table")
                         except Exception as e:
@@ -231,18 +193,6 @@ def main():
 
                 # Add the comprehension prompt to the list of skills
                 skills_list.append(comprehension_prompt)
-
-                # Debug info for final skills list
-                with st.sidebar:
-                    if show_debug_info:
-                        st.write("## Final Skills List")
-                        for idx, skill in enumerate(skills_list):
-                            st.write(f"### Skill {idx + 1}: {skill.get('skill_name', 'Unnamed Skill')}")
-                            st.write(f"Prompt: {skill.get('skill_ai_prompt', 'No Prompt Provided')}")
-                            if not skill.get('skill_name') or not skill.get('skill_ai_prompt'):
-                                st.error("Skill is missing a name or prompt.")
-                            else:
-                                st.success("Skill is properly defined.")
 
                 # Update progress - Skills fetched (60%)
                 progress_text.text("🎯 Evaluating your skills...")
@@ -263,14 +213,6 @@ def main():
                 progress_text.text("💾 Saving your results...")
                 progress_bar.progress(80)
 
-                # Display analysis results
-                with st.sidebar:
-                    st.write("## Debug: Skills Analysis Results")
-                    for idx, result in enumerate(skills_analysis_results):
-                        st.write(f"### Skill {idx + 1}: {result['skill']}")
-                        st.write(f"Score: {result['score']}")
-                        st.write(f"Feedback: {result['feedback']}")
-                    
                 st.write("## Analysis Scores")
 
                 # Display scores in columns
@@ -334,17 +276,6 @@ def main():
                     # Save Skill Sessions
                     skill_table = user_doc.get_table(user_skill_session_table)
                     
-                    # Debug: Get and display the skill session table schema
-                    with st.sidebar:
-                        st.write("## Debug: Skill Session Table Schema")
-                        try:
-                            schema = coda.get_table_schema(user_skill_session_table)
-                            st.write("### Columns in Skill Session Table:")
-                            for col in schema['columns']:
-                                st.write(f"- {col['name']} (ID: {col['id']})")
-                        except Exception as e:
-                            st.error(f"Error getting table schema: {e}")
-                    
                     # Add WPM as a skill session
                     wpm_skill_row = {
                         "PromptSession": session_id,
@@ -353,11 +284,6 @@ def main():
                         "skill_score": wpm_score,
                         "skill_feedback": f"User spoke at {wpm} words per minute"
                     }
-                    
-                    # Debug: Show the row we're trying to insert
-                    with st.sidebar:
-                        st.write("### WPM Skill Row to Insert:")
-                        st.write(wpm_skill_row)
                     
                     skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in wpm_skill_row.items()])
                     
@@ -372,11 +298,6 @@ def main():
                                 "skill_feedback": result['feedback']
                             }
                             
-                            # Debug: Show each skill row we're trying to insert
-                            with st.sidebar:
-                                st.write(f"### Skill Row to Insert ({result['skill']}):")
-                                st.write(skill_row)
-                            
                             skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in skill_row.items()])
                     
                     st.success(f"Results successfully saved! Session ID: {session_id}")
@@ -388,32 +309,8 @@ def main():
                     # Show balloons to celebrate completion
                     st.balloons()
                     
-                    # Debug info
-                    with st.sidebar:
-                        st.write("## Debug: Saved Data")
-                        st.write("### Prompt Session")
-                        st.write(prompt_session_row)
-                        st.write("### Skill Sessions")
-                        st.write("WPM Skill:", wpm_skill_row)
-                        for result in skills_analysis_results:
-                            if result['skill'] != 'comprehension':
-                                st.write(f"{result['skill']}:", {
-                                    "PromptSession": session_id,
-                                    "date_time": current_time,
-                                    "Skill": result['skill'],
-                                    "skill_score": result['score'],
-                                    "skill_feedback": result['feedback']
-                                })
                 except Exception as e:
                     st.error(f"Error saving results: {str(e)}")
-                    # Show more detailed error info in debug mode
-                    with st.sidebar:
-                        st.write("## Debug: Error Details")
-                        st.write(f"Error type: {type(e)}")
-                        st.write(f"Error message: {str(e)}")
-                        import traceback
-                        st.write("Full traceback:")
-                        st.write(traceback.format_exc())
     
     except Exception as e:
         import traceback
