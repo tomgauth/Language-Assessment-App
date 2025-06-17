@@ -81,48 +81,65 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
         # Return default data if user not found
         return get_default_learning_plan_data()
     
-    # Extract user data
+    # Extract user data using the proper field structure
     conversation_type = user_row.get('demo_conversation', 'General Conversation')
     topics = user_row.get('demo_topics', '')
     skills = user_row.get('demo_skills', '')
+    prompts = user_row.get('prompts', '')
+    program_duration = user_row.get('program_duration', 90)
+    current_wpm = user_row.get('current_wpm', 60)
+    num_sentence_recall = user_row.get('num_sentence_recall', 350)
+    num_sentences_recognize = user_row.get('num_sentences_recognize', 700)
+    start_date = user_row.get('start_date', '')
+    target_wpm = user_row.get('target_wpm', 100)
     
     # Parse topics and skills
     topic_list = [topic.strip() for topic in topics.split(',') if topic.strip()] if topics else ['General Topics']
     skill_list = [skill.strip() for skill in skills.split(',') if skill.strip()] if skills else ['Basic Communication']
+    prompt_list = [prompt.strip() for prompt in prompts.split(',') if prompt.strip()] if prompts else []
+    
+    # Estimate sentences per topic and skill
+    topic_sentences = estimate_sentences_per_topic(topic_list, num_sentence_recall, num_sentences_recognize)
+    skill_sentences = estimate_sentences_per_skill(skill_list, num_sentence_recall, num_sentences_recognize)
     
     # Generate learning plan data
     learning_data = {
         'conversation_type': conversation_type,
         'difficulty': 'Intermediate',
-        'learning_days': 90,  # 90 days program
-        'sentences_to_recall': 350,  # 350 recall sentences
-        'sentences_to_recognize': 700,  # 2x recall for recognition
-        'total_sentences': 1050,
+        'learning_days': program_duration,
+        'sentences_to_recall': num_sentence_recall,
+        'sentences_to_recognize': num_sentences_recognize,
+        'total_sentences': num_sentence_recall + num_sentences_recognize,
         'traditional_speed': 3,  # sentences per day traditional
         'fsrs_speed': 10.5,  # sentences per day with FSRS (3.5x improvement)
         'new_sentences_per_day': 12,  # new sentences per day
-        'expected_sentences_known': 1050,
-        'expected_final_wpm': 100,  # Target 100 WPM
-        'current_wpm': 60,  # Starting WPM
-        'fluency_improvement': 40  # WPM improvement
+        'expected_sentences_known': num_sentence_recall + num_sentences_recognize,
+        'expected_final_wpm': target_wpm,
+        'current_wpm': current_wpm,
+        'fluency_improvement': target_wpm - current_wpm,
+        'start_date': start_date
     }
     
     # User information
     user_info = {
         'username': username,
         'current_level': 'B1',  # Current level B1
-        'current_wpm': 60,
+        'current_wpm': current_wpm,
         'conversation_type': conversation_type,
-        'total_days': 90,  # 90 days program
+        'total_days': program_duration,
         'target_level': 'B2+',
-        'target_wpm': 100
+        'target_wpm': target_wpm,
+        'start_date': start_date
     }
     
     # Content breakdown
     content = {
         'topics': topic_list,
         'skills': skill_list,
-        'total_hours': 135,  # 1.5 hours per day
+        'prompts': prompt_list,
+        'topic_sentences': topic_sentences,
+        'skill_sentences': skill_sentences,
+        'total_hours': program_duration * 1.5,  # 1.5 hours per day
         'sessions_per_week': 7,
         'hours_per_session': 1.5
     }
@@ -135,13 +152,13 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
             'improvement': 3.5
         },
         'learning_volume': {
-            'traditional': 270,
-            'our_method': 1050,
-            'improvement': 3.9
+            'traditional': (num_sentence_recall + num_sentences_recognize) // 4,
+            'our_method': num_sentence_recall + num_sentences_recognize,
+            'improvement': 4.0
         },
         'fluency_impact': {
             'traditional': 20,
-            'our_method': 40,
+            'our_method': target_wpm - current_wpm,
             'improvement': 2.0
         },
         'comprehension_impact': {
@@ -164,6 +181,88 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
         'milestones': milestones,
         'learning_summary': learning_summary
     }
+
+def estimate_sentences_per_topic(topics: List[str], total_recall: int, total_recognize: int) -> Dict[str, Dict[str, int]]:
+    """
+    Estimate the number of sentences per topic based on topic complexity and importance.
+    
+    Args:
+        topics: List of topics
+        total_recall: Total recall sentences
+        total_recognize: Total recognition sentences
+    
+    Returns:
+        Dictionary with topic breakdown
+    """
+    if not topics:
+        return {}
+    
+    # Define topic weights based on complexity and importance
+    topic_weights = {
+        '💼 Previous work experience': 0.25,
+        '🎯 Why I\'m applying for the job': 0.20,
+        '🪞 My strengths and weaknesses': 0.15,
+        'General Topics': 0.10
+    }
+    
+    # Calculate sentences per topic
+    topic_sentences = {}
+    for topic in topics:
+        # Get weight for this topic, default to 0.10 if not found
+        weight = topic_weights.get(topic, 0.10)
+        
+        # Calculate sentences for this topic
+        recall_sentences = int(total_recall * weight)
+        recognize_sentences = int(total_recognize * weight)
+        
+        topic_sentences[topic] = {
+            'recall_sentences': recall_sentences,
+            'recognize_sentences': recognize_sentences,
+            'total_sentences': recall_sentences + recognize_sentences
+        }
+    
+    return topic_sentences
+
+def estimate_sentences_per_skill(skills: List[str], total_recall: int, total_recognize: int) -> Dict[str, Dict[str, int]]:
+    """
+    Estimate the number of sentences per skill based on skill complexity and importance.
+    
+    Args:
+        skills: List of skills
+        total_recall: Total recall sentences
+        total_recognize: Total recognition sentences
+    
+    Returns:
+        Dictionary with skill breakdown
+    """
+    if not skills:
+        return {}
+    
+    # Define skill weights based on complexity and importance
+    skill_weights = {
+        '🧾 Use professional and precise vocabulary': 0.30,
+        '💪 Show confidence in French': 0.25,
+        '🎓 Understand and apply French interview etiquette': 0.20,
+        'Basic Communication': 0.10
+    }
+    
+    # Calculate sentences per skill
+    skill_sentences = {}
+    for skill in skills:
+        # Get weight for this skill, default to 0.10 if not found
+        weight = skill_weights.get(skill, 0.10)
+        
+        # Calculate sentences for this skill
+        recall_sentences = int(total_recall * weight)
+        recognize_sentences = int(total_recognize * weight)
+        
+        skill_sentences[skill] = {
+            'recall_sentences': recall_sentences,
+            'recognize_sentences': recognize_sentences,
+            'total_sentences': recall_sentences + recognize_sentences
+        }
+    
+    return skill_sentences
 
 def format_learning_plan_for_display(plan_data: Dict[str, Any]) -> Dict[str, Any]:
     """

@@ -1163,15 +1163,65 @@ def run_learning_plan_app():
         # Skills Development
         st.subheader("💪 Skills You'll Develop")
         
-        # Display skills in a grid
-        skills_per_row = 3
-        for i in range(0, len(formatted_plan['content']['skills']), skills_per_row):
-            row_skills = formatted_plan['content']['skills'][i:i + skills_per_row]
-            cols = st.columns(len(row_skills))
+        # Display skills with sentence breakdown
+        if formatted_plan['content']['skill_sentences']:
+            for skill, sentences in formatted_plan['content']['skill_sentences'].items():
+                with st.expander(f"✅ {skill}", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric("Recall Sentences", sentences['recall_sentences'])
+                    
+                    with col2:
+                        st.metric("Recognize Sentences", sentences['recognize_sentences'])
+                    
+                    with col3:
+                        st.metric("Total Sentences", sentences['total_sentences'])
+        else:
+            # Display skills in a grid (fallback)
+            skills_per_row = 3
+            for i in range(0, len(formatted_plan['content']['skills']), skills_per_row):
+                row_skills = formatted_plan['content']['skills'][i:i + skills_per_row]
+                cols = st.columns(len(row_skills))
+                
+                for j, skill in enumerate(row_skills):
+                    with cols[j]:
+                        st.markdown(f"✅ {skill}")
+
+        # Topics Breakdown
+        st.subheader("📚 Topics You'll Cover")
+        
+        # Display topics with sentence breakdown
+        if formatted_plan['content']['topic_sentences']:
+            for topic, sentences in formatted_plan['content']['topic_sentences'].items():
+                with st.expander(f"📖 {topic}", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric("Recall Sentences", sentences['recall_sentences'])
+                    
+                    with col2:
+                        st.metric("Recognize Sentences", sentences['recognize_sentences'])
+                    
+                    with col3:
+                        st.metric("Total Sentences", sentences['total_sentences'])
+        else:
+            # Display topics in a grid (fallback)
+            topics_per_row = 3
+            for i in range(0, len(formatted_plan['content']['topics']), topics_per_row):
+                row_topics = formatted_plan['content']['topics'][i:i + topics_per_row]
+                cols = st.columns(len(row_topics))
+                
+                for j, topic in enumerate(row_topics):
+                    with cols[j]:
+                        st.markdown(f"📖 {topic}")
+
+        # Practice Prompts
+        if formatted_plan['content']['prompts']:
+            st.subheader("🎯 Practice Prompts")
             
-            for j, skill in enumerate(row_skills):
-                with cols[j]:
-                    st.markdown(f"✅ {skill}")
+            for i, prompt in enumerate(formatted_plan['content']['prompts'], 1):
+                st.markdown(f"**{i}.** {prompt}")
 
         # Learning Milestones
         st.subheader("🎯 Learning Milestones")
