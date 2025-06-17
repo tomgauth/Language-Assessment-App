@@ -217,6 +217,7 @@ def main():
         disabled=False,
         label_visibility="visible"
     )
+    
     if audio_data is not None:
         if st.button("Confirm"):
             session_id = str(uuid.uuid4())
