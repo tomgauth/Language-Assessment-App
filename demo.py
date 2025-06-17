@@ -93,7 +93,7 @@ def main():
     # Set page config to centered layout
     st.set_page_config(
         page_title="Language Assessment Demo",
-        page_icon="��",
+        page_icon="🎯",
         layout="centered",
         initial_sidebar_state="collapsed"
     )
@@ -150,16 +150,19 @@ def main():
         users = [u.strip() for u in str(demo_user_field).split(',')]
         return username in users
 
-    # Get all prompts for the user
-    all_prompts = get_table_rows(DEMO_DOC_ID, DEMO_PROMPTS_TABLE)
-    user_prompts = [row for row in all_prompts if user_in_demo_user(row.get('demo_user', ''), username)]
+    # Get all prompts and skills for the user (only once)
+    if 'demo_user_prompts' not in st.session_state or 'demo_user_skills' not in st.session_state:
+        with st.spinner("Loading prompts and skills..."):
+            # Get all prompts for the user
+            all_prompts = get_table_rows(DEMO_DOC_ID, DEMO_PROMPTS_TABLE)
+            st.session_state['demo_user_prompts'] = [row for row in all_prompts if user_in_demo_user(row.get('demo_user', ''), username)]
 
-    # Pick a random prompt
-    prompt_row = random.choice(user_prompts) if user_prompts else None
+            # Get all skills for the user
+            all_skills = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
+            st.session_state['demo_user_skills'] = [row for row in all_skills if user_in_demo_user(row.get('demo_user', ''), username)]
 
-    # Get all skills for the user
-    all_skills = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
-    user_skills = [row for row in all_skills if user_in_demo_user(row.get('demo_user', ''), username)]
+    user_prompts = st.session_state['demo_user_prompts']
+    user_skills = st.session_state['demo_user_skills']
 
     # --- Debug: Show user prompts and all available prompts ---
     with st.expander("🛠️ Debug: Prompt Matching", expanded=True):
@@ -167,30 +170,47 @@ def main():
         st.write([row.get('prompt_text', '') for row in user_prompts])
         st.write("**All skills for this user:**")
         st.write([row.get('skill_name', '') for row in user_skills])
-        if prompt_row:
-            st.write(f"**Selected prompt:** {prompt_row.get('prompt_text', '')}")
+        if 'demo_current_prompt' in st.session_state:
+            st.write(f"**Selected prompt:** {st.session_state['demo_current_prompt'].get('prompt_text', '')}")
         else:
-            st.error("No prompts found for this user.")
+            st.write("**Selected prompt:** None (will be selected when needed)")
 
-    # Step 2: Get and display a random prompt
+    # Step 2: Get and display a prompt (with session state management)
     st.subheader("🎯 Your Practice Prompt")
-    if not prompt_row:
+    if not user_prompts:
         st.error("No prompts available for this user. Please check the demo_user column in your data.")
         return
+
+    # Check if we need to select a new prompt (only if no prompt stored or username changed)
+    username_key = f"demo_prompt_username_{username}"
+    if username_key not in st.session_state or st.session_state.get('demo_current_username') != username:
+        # Select a random prompt from the filtered list
+        st.session_state[username_key] = random.choice(user_prompts)
+        st.session_state['demo_current_username'] = username
+    
+    # Use the stored prompt
+    prompt_row = st.session_state[username_key]
+    
     # Display context
     st.subheader("🏘️ Context of the situation:")
     st.write(prompt_row.get('prompt_context', 'No context available'))
+    
     # Add a button to get a new prompt
     col1, col2 = st.columns([3, 1])
     with col2:
         if st.button("🔄 New Prompt", help="Get a different random prompt"):
+            # Clear the stored prompt to force a new selection
+            if username_key in st.session_state:
+                del st.session_state[username_key]
             st.rerun()
+    
     # Display audio if available
     audio_url = prompt_row.get('prompt_audio_url_txt', '')
     if audio_url and not pd.isna(audio_url):
         st.audio(audio_url)
     else:
         st.warning("No audio available for this prompt")
+    
     # Step 3: Record user's voice
     st.subheader("🎤 Record Your Response")
     st.info("💡 **Recording Tips:** Speak normally, as if this was a natural conversation. Don't read from any text or get help from reading materials. Try to listen to the audio only once and respond naturally. Avoid long silences at the beginning and end of your recording, as these are interpreted as drops in fluency.")
@@ -347,6 +367,13 @@ def main():
                 progress_text.text("✨ Analysis complete!")
                 progress_bar.progress(100)
                 st.balloons()
+                
+                # Clear session state to allow for a fresh start with a new prompt
+                if username_key in st.session_state:
+                    del st.session_state[username_key]
+                if 'demo_current_username' in st.session_state:
+                    del st.session_state['demo_current_username']
+                
             except Exception as e:
                 st.error(f"Error saving results: {str(e)}")
                 import traceback
