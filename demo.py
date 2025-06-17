@@ -143,39 +143,57 @@ def main():
     
     st.markdown("---")
     
+    # --- PROMPT AND SKILL SELECTION BASED ON demo_user COLUMN ---
+    def user_in_demo_user(demo_user_field, username):
+        if not demo_user_field:
+            return False
+        users = [u.strip() for u in str(demo_user_field).split(',')]
+        return username in users
+
+    # Get all prompts for the user
+    all_prompts = get_table_rows(DEMO_DOC_ID, DEMO_PROMPTS_TABLE)
+    user_prompts = [row for row in all_prompts if user_in_demo_user(row.get('demo_user', ''), username)]
+
+    # Pick a random prompt
+    prompt_row = random.choice(user_prompts) if user_prompts else None
+
+    # Get all skills for the user
+    all_skills = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
+    user_skills = [row for row in all_skills if user_in_demo_user(row.get('demo_user', ''), username)]
+
+    # --- Debug: Show user prompts and all available prompts ---
+    with st.expander("🛠️ Debug: Prompt Matching", expanded=True):
+        st.write("**All prompts for this user:**")
+        st.write([row.get('prompt_text', '') for row in user_prompts])
+        st.write("**All skills for this user:**")
+        st.write([row.get('skill_name', '') for row in user_skills])
+        if prompt_row:
+            st.write(f"**Selected prompt:** {prompt_row.get('prompt_text', '')}")
+        else:
+            st.error("No prompts found for this user.")
+
     # Step 2: Get and display a random prompt
     st.subheader("🎯 Your Practice Prompt")
-    
-    # Get a random prompt
-    prompt_row = get_random_prompt(user_data)
-    
     if not prompt_row:
-        st.error("No prompts available. Please contact support.")
+        st.error("No prompts available for this user. Please check the demo_user column in your data.")
         return
-    
     # Display context
     st.subheader("🏘️ Context of the situation:")
     st.write(prompt_row.get('prompt_context', 'No context available'))
-    
     # Add a button to get a new prompt
     col1, col2 = st.columns([3, 1])
     with col2:
         if st.button("🔄 New Prompt", help="Get a different random prompt"):
             st.rerun()
-    
-    # Display audio if available            
-    audio_url = prompt_row.get('prompt_audio_url_txt', '')            
+    # Display audio if available
+    audio_url = prompt_row.get('prompt_audio_url_txt', '')
     if audio_url and not pd.isna(audio_url):
         st.audio(audio_url)
     else:
         st.warning("No audio available for this prompt")
-    
     # Step 3: Record user's voice
     st.subheader("🎤 Record Your Response")
-    
-    # Add instructional text
     st.info("💡 **Recording Tips:** Speak normally, as if this was a natural conversation. Don't read from any text or get help from reading materials. Try to listen to the audio only once and respond naturally. Avoid long silences at the beginning and end of your recording, as these are interpreted as drops in fluency.")
-    
     audio_data = st.audio_input(
         label="Click to record",
         key=None,
@@ -186,47 +204,27 @@ def main():
         disabled=False,
         label_visibility="visible"
     )
-    
-    if audio_data is not None:            
-        # Save the recording (optional)
-        if st.button("Confirm"):                
-            # Generate a unique session ID for this prompt session
+    if audio_data is not None:
+        if st.button("Confirm"):
             session_id = str(uuid.uuid4())
-            
-            # Initialize progress bar
             progress_bar = st.progress(0)
             progress_text = st.empty()
-            
-            # Display the prompt text for reference
             st.subheader("📝 Original Prompt")
             st.write(prompt_row.get('prompt_text', 'No prompt text available'))
-            
-            # Update progress - Starting transcription (10%)
             progress_text.text("🎙️ Transcribing your audio...")
             progress_bar.progress(10)
-            
-            # Transcribe the audio
             transcription = transcribe_audio(openai_api_key, audio_data)
-            
-            # Get audio duration
-            duration = get_audio_duration(audio_data)  
-
+            duration = get_audio_duration(audio_data)
             if transcription and duration:
-                # Update progress - Transcription complete (30%)
                 progress_text.text("✅ Transcription complete! Analyzing your response...")
                 progress_bar.progress(30)
-                
                 st.subheader("Transcription")
                 st.text_area("Transcription", transcription, height=200, help="This is the transcribed text from your audio input.")
             else:
                 st.error("Failed to transcribe or get audio duration")
                 return
-
-            # Update progress - Starting WPM analysis (40%)
             progress_text.text("📊 Calculating speaking rate and vocabulary...")
             progress_bar.progress(40)
-
-            # Calculate WPM                
             analysis_results = analyze_lemmas_and_frequency(transcription, duration)
             wpm = analysis_results['wpm']
             wpm_score = min(round(wpm), 100)
@@ -234,55 +232,29 @@ def main():
             vocabulary_score = analysis_results['vocabulary_score']
             total_lemmas = analysis_results['total_lemmas']
             unique_lemmas = analysis_results['unique_lemmas']
-            
-            # Update progress - WPM analysis complete (50%)
             progress_text.text("✅ Speaking rate calculated! Analyzing skills...")
             progress_bar.progress(50)
-            
-            # Get user's specific skills from the demo skills table
-            user_skills_text = user_data.get('demo_skills', '')
+            # Prepare skills list for analysis
             skills_list = []
-            
-            if user_skills_text:
-                # Parse the skills string (comma-separated)
-                user_skill_names = [skill.strip() for skill in user_skills_text.split(',') if skill.strip()]
-                
-                # Get all skills from the demo skills table
-                skills_rows = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
-                
-                # Filter skills to only include the user's specific skills
-                for skill_row in skills_rows:
-                    skill_name = skill_row.get('skill_name', '')
-                    if skill_name in user_skill_names:
-                        skills_list.append({
-                            'skill_name': skill_name,
-                            'skill_ai_prompt': skill_row.get('skill_ai_prompt', '')
-                        })
-            
-            # If no user-specific skills found, use all skills as fallback
-            if not skills_list:
-                skills_rows = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
-                for skill_row in skills_rows:
-                    skills_list.append({
-                        'skill_name': skill_row.get('skill_name', ''),
-                        'skill_ai_prompt': skill_row.get('skill_ai_prompt', '')
-                    })
-
-            # Create a default comprehension prompt
+            for skill_row in user_skills:
+                skill_prompt = skill_row.get('skill_ai_prompt', '')
+                # Ensure feedback is in English
+                if 'Respond in English' not in skill_prompt and 'Provide feedback in English' not in skill_prompt:
+                    skill_prompt += '\n\nProvide feedback in English.'
+                skills_list.append({
+                    'skill_name': skill_row.get('skill_name', ''),
+                    'skill_ai_prompt': skill_prompt
+                })
+            # Add the comprehension prompt
             comprehension_prompt = {
                 'skill_name': 'comprehension',
                 'skill_ai_prompt': 'evaluate the relevancy of the answer provided given the question was: '
             }
             comprehension_prompt['skill_ai_prompt'] += "Question: " + prompt_row.get('prompt_text', '') + ". And context: " + prompt_row.get('prompt_context', '')
-
-            # Add the comprehension prompt to the list of skills
+            comprehension_prompt['skill_ai_prompt'] += "\n\nProvide feedback in English."
             skills_list.append(comprehension_prompt)
-
-            # Update progress - Skills fetched (60%)
             progress_text.text("🎯 Evaluating your skills...")
             progress_bar.progress(60)
-
-            # Analyze the skills
             if skills_list:
                 skills_analysis_results = dynamic_skills_analysis(
                     text=transcription,
@@ -292,25 +264,16 @@ def main():
                     context=prompt_row.get('prompt_context', ''),
                     openai_api_key=openai_api_key
                 )
-
-            # Update progress - Skills analyzed (80%)
             progress_text.text("💾 Saving your results...")
             progress_bar.progress(80)
-
             st.write("## Analysis Scores")
-
-            # Create a list of all scores to display (WPM + skills)
             all_scores = []
-            
-            # Add WPM score
             all_scores.append({
                 'name': 'Fluency (WPM)',
                 'score': wpm_score,
                 'feedback': f"User spoke at {wpm} words per minute",
                 'color': get_color(wpm_score)
             })
-            
-            # Add skill scores
             for result in skills_analysis_results:
                 all_scores.append({
                     'name': result['skill'],
@@ -318,19 +281,13 @@ def main():
                     'feedback': result['feedback'],
                     'color': get_color(result['score'])
                 })
-
-            # Display scores in rows of max 4
             max_per_row = 4
             for i in range(0, len(all_scores), max_per_row):
                 row_scores = all_scores[i:i + max_per_row]
                 cols = st.columns(len(row_scores))
-                
                 for j, score_data in enumerate(row_scores):
                     with cols[j]:
-                        # Create a card-like container
                         st.markdown("---")
-                        
-                        # Display the circular progress
                         progress = CircularProgress(
                             label=score_data['name'][:30] + ("..." if len(score_data['name']) > 30 else ""),
                             value=score_data['score'],
@@ -340,108 +297,56 @@ def main():
                             track_color="lightgray"
                         )
                         progress.st_circular_progress()
-                        
-                        # Display score
                         st.markdown(f"**Score: {score_data['score']}**")
-                        
-                        # Display collapsible feedback
                         with st.expander("📝 View Feedback", expanded=False):
                             st.write(score_data['feedback'])
-                        
                         st.markdown("---")
-            
             if not all_scores:
                 st.info("No skills found or failed to parse skills.")
-
-            # Prepare data for saving
             current_time = datetime.datetime.now().strftime("%Y-%m-%d, %I:%M:%S %p")
             prompt = prompt_row.get('prompt_text', '')
             user_transcription = transcription
             answer_duration = duration
-
             try:
-                # For demo version, we'll save to a simpler structure
-                # You can create these tables manually in Coda or use existing ones
-                
-                # Option 1: Save to existing tables (if they exist)
-                try:
-                    doc = Document(DEMO_DOC_ID, coda=coda)
-                    
-                    # Try to save to demo conversation sessions table
-                    conversation_table = doc.get_table(DEMO_CONVERSATIONS_TABLE)
-                    
-                    # Create the conversation session row
-                    conversation_row = {
-                        "username": username,
-                        "session_id": session_id,
-                        "date_time": current_time,
-                        "prompt": prompt,
-                        "user_transcription": user_transcription,
-                        "answer_duration": answer_duration,
-                        "wpm_score": wpm_score,
-                        "fluency_score": fluency_score,
-                        "vocabulary_score": vocabulary_score
-                    }
-                    
-                    # Insert the conversation session
-                    conversation_table.upsert_row([Cell(column=key, value_storage=value) for key, value in conversation_row.items()])
-                    
-                    # Try to save skill sessions
-                    skill_table = doc.get_table(DEMO_SKILL_SESSIONS_TABLE)
-                    
-                    # Add WPM as a skill session
-                    wpm_skill_row = {
-                        "username": username,
-                        "session_id": session_id,
-                        "date_time": current_time,
-                        "skill_name": "Fluency (WPM)",
-                        "skill_score": wpm_score,
-                        "skill_feedback": f"User spoke at {wpm} words per minute"
-                    }
-                    
-                    skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in wpm_skill_row.items()])
-                    
-                    # Add other skill sessions
-                    for result in skills_analysis_results:
-                        if result['skill'] != 'comprehension':  # Skip comprehension as it's already added
-                            skill_row = {
-                                "username": username,
-                                "session_id": session_id,
-                                "date_time": current_time,
-                                "skill_name": result['skill'],
-                                "skill_score": result['score'],
-                                "skill_feedback": result['feedback']
-                            }
-                            
-                            skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in skill_row.items()])
-                    
-                    st.success(f"Results successfully saved! Session ID: {session_id}")
-                    
-                except Exception as table_error:
-                    # If tables don't exist, just log the results
-                    st.warning("Demo session tables not found. Results logged below:")
-                    st.json({
-                        "session_id": session_id,
-                        "username": username,
-                        "date_time": current_time,
-                        "prompt": prompt,
-                        "transcription": user_transcription,
-                        "duration": answer_duration,
-                        "scores": {
-                            "wpm_score": wpm_score,
-                            "fluency_score": fluency_score,
-                            "vocabulary_score": vocabulary_score,
-                            "skills": [{"skill": result['skill'], "score": result['score']} for result in skills_analysis_results]
+                doc = Document(DEMO_DOC_ID, coda=coda)
+                conversation_row = {
+                    "username": username,
+                    "session_id": session_id,
+                    "date_time": current_time,
+                    "prompt": prompt,
+                    "user_transcription": user_transcription,
+                    "answer_duration": answer_duration,
+                    "wpm_score": wpm_score,
+                    "fluency_score": fluency_score,
+                    "vocabulary_score": vocabulary_score
+                }
+                conversation_table = doc.get_table(DEMO_CONVERSATIONS_TABLE)
+                conversation_table.upsert_row([Cell(column=key, value_storage=value) for key, value in conversation_row.items()])
+                skill_table = doc.get_table(DEMO_SKILL_SESSIONS_TABLE)
+                wpm_skill_row = {
+                    "username": username,
+                    "session_id": session_id,
+                    "date_time": current_time,
+                    "skill_name": "Fluency (WPM)",
+                    "skill_score": wpm_score,
+                    "skill_feedback": f"User spoke at {wpm} words per minute"
+                }
+                skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in wpm_skill_row.items()])
+                for result in skills_analysis_results:
+                    if result['skill'] != 'comprehension':
+                        skill_row = {
+                            "username": username,
+                            "session_id": session_id,
+                            "date_time": current_time,
+                            "skill_name": result['skill'],
+                            "skill_score": result['score'],
+                            "skill_feedback": result['feedback']
                         }
-                    })
-                
-                # Update progress - Complete (100%)
+                        skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in skill_row.items()])
+                st.success(f"Results successfully saved! Session ID: {session_id}")
                 progress_text.text("✨ Analysis complete!")
                 progress_bar.progress(100)
-                
-                # Show balloons to celebrate completion
                 st.balloons()
-                
             except Exception as e:
                 st.error(f"Error saving results: {str(e)}")
                 import traceback

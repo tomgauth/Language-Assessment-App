@@ -36,6 +36,18 @@ def main():
     
     st.title("Language Assessment MVP")
     
+    # Add sidebar navigation to switch between App and Demo using radio buttons
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio("Go to:", ["App", "Demo"])
+    app_url = "http://localhost:8505"  # Adjust if your main app runs on a different port
+    demo_url = "http://localhost:8502"
+
+    if page == "App":
+        st.sidebar.success(f"You are on the App page. If not, open [this link]({app_url}) in a new tab.")
+    elif page == "Demo":
+        st.sidebar.info(f"Go to the Demo page: [Open Demo]({demo_url})")
+        st.stop()
+    
     # Get username from query params if present
     query_params = st.query_params
     default_username = query_params.get('username', '')
@@ -59,18 +71,18 @@ def main():
             user_skill_session_table = user_row['user_skill_session_table']  # Get the skill session table ID
             user_skills_table = user_row['user_skills_table']
             # --- Display conversation, topics, and skills at the top ---
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
+            rows = get_prompts_table_rows(doc_id, table_id)
             with col1:
-                st.info("**Conversation Type:**")
-                st.write(user_row.get('demo_conversation', 'Not specified'))
-            with col2:
                 st.info("**Topics You're Working On:**")
-                topics = user_row.get('demo_topics', '')
-                for topic in [t.strip() for t in topics.split(',') if t.strip()]:
+                
+                # Extract unique topics
+                topics = list(set(row['topic'] for row in rows))
+                for topic in topics:
                     st.write(f"• {topic}")
-            with col3:
+            with col2:
                 st.info("**Skills You're Developing:**")
-                skills = user_row.get('demo_skills', '')
+                skills = ', '.join(set(row['conversation_skills'] for row in rows))
                 for skill in [s.strip() for s in skills.split(',') if s.strip()]:
                     st.write(f"• {skill}")
             st.markdown("---")
