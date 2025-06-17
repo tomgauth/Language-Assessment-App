@@ -150,19 +150,15 @@ def main():
         users = [u.strip() for u in str(demo_user_field).split(',')]
         return username in users
 
-    # Get all prompts and skills for the user (only once)
-    if 'demo_user_prompts' not in st.session_state or 'demo_user_skills' not in st.session_state:
-        with st.spinner("Loading prompts and skills..."):
-            # Get all prompts for the user
-            all_prompts = get_table_rows(DEMO_DOC_ID, DEMO_PROMPTS_TABLE)
-            st.session_state['demo_user_prompts'] = [row for row in all_prompts if user_in_demo_user(row.get('demo_user', ''), username)]
+    # Get all prompts and skills for the user
+    with st.spinner("Loading prompts and skills..."):
+        # Get all prompts for the user
+        all_prompts = get_table_rows(DEMO_DOC_ID, DEMO_PROMPTS_TABLE)
+        user_prompts = [row for row in all_prompts if user_in_demo_user(row.get('demo_user', ''), username)]
 
-            # Get all skills for the user
-            all_skills = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
-            st.session_state['demo_user_skills'] = [row for row in all_skills if user_in_demo_user(row.get('demo_user', ''), username)]
-
-    user_prompts = st.session_state['demo_user_prompts']
-    user_skills = st.session_state['demo_user_skills']
+        # Get all skills for the user
+        all_skills = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
+        user_skills = [row for row in all_skills if user_in_demo_user(row.get('demo_user', ''), username)]
 
     # --- Debug: Show user prompts and all available prompts ---
     with st.expander("🛠️ Debug: Prompt Matching", expanded=True):
@@ -170,8 +166,8 @@ def main():
         st.write([row.get('prompt_text', '') for row in user_prompts])
         st.write("**All skills for this user:**")
         st.write([row.get('skill_name', '') for row in user_skills])
-        if 'demo_current_prompt' in st.session_state:
-            st.write(f"**Selected prompt:** {st.session_state['demo_current_prompt'].get('prompt_text', '')}")
+        if 'current_prompt' in st.session_state:
+            st.write(f"**Selected prompt:** {st.session_state['current_prompt'].get('prompt_text', '')}")
         else:
             st.write("**Selected prompt:** None (will be selected when needed)")
 
@@ -181,15 +177,13 @@ def main():
         st.error("No prompts available for this user. Please check the demo_user column in your data.")
         return
 
-    # Check if we need to select a new prompt (only if no prompt stored or username changed)
-    username_key = f"demo_prompt_username_{username}"
-    if username_key not in st.session_state or st.session_state.get('demo_current_username') != username:
+    # Check if we need to select a new prompt (only if no prompt stored)
+    if 'current_prompt' not in st.session_state:
         # Select a random prompt from the filtered list
-        st.session_state[username_key] = random.choice(user_prompts)
-        st.session_state['demo_current_username'] = username
+        st.session_state['current_prompt'] = random.choice(user_prompts)
     
     # Use the stored prompt
-    prompt_row = st.session_state[username_key]
+    prompt_row = st.session_state['current_prompt']
     
     # Display context
     st.subheader("🏘️ Context of the situation:")
@@ -199,9 +193,8 @@ def main():
     col1, col2 = st.columns([3, 1])
     with col2:
         if st.button("🔄 New Prompt", help="Get a different random prompt"):
-            # Clear the stored prompt to force a new selection
-            if username_key in st.session_state:
-                del st.session_state[username_key]
+            # Select a new random prompt
+            st.session_state['current_prompt'] = random.choice(user_prompts)
             st.rerun()
     
     # Display audio if available
@@ -369,10 +362,8 @@ def main():
                 st.balloons()
                 
                 # Clear session state to allow for a fresh start with a new prompt
-                if username_key in st.session_state:
-                    del st.session_state[username_key]
-                if 'demo_current_username' in st.session_state:
-                    del st.session_state['demo_current_username']
+                if 'current_prompt' in st.session_state:
+                    del st.session_state['current_prompt']
                 
             except Exception as e:
                 st.error(f"Error saving results: {str(e)}")
