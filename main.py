@@ -1475,17 +1475,17 @@ def main():
     
     # Add sidebar navigation to switch between App and Demo using radio buttons
     st.sidebar.title("Navigation")
-    app_mode = st.sidebar.radio("Select App Mode:", ["Learning Plan", "Main App", "Demo App", "My Progress"], index=0)
+    app_mode = st.sidebar.radio("Select App Mode:", ["Main App", "Demo App", "My Progress", "Learning Plan"], index=0)
     
     # Run the appropriate app based on selection
-    if app_mode == "Learning Plan":
-        run_learning_plan_app()
-    elif app_mode == "Main App":
+    if app_mode == "Main App":
         run_main_app()
     elif app_mode == "Demo App":
         run_demo_app()
-    else:
+    elif app_mode == "My Progress":
         run_my_progress_app()
+    else:
+        run_learning_plan_app()
 
 if __name__ == "__main__":
     main() 
