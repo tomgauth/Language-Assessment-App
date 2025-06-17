@@ -26,18 +26,22 @@ def get_prompts_table_rows(doc_id: str, table_id: str):
     return [row.to_dict() for row in rows]
 
 def main():
-    # Configure the page to be wider
+    # Set page config to centered layout
     st.set_page_config(
-        page_title="Language Assessment MVP",
-        page_icon="🎤",
-        layout="wide",
+        page_title="Language Assessment",
+        page_icon="��",
+        layout="centered",
         initial_sidebar_state="collapsed"
     )
     
     st.title("Language Assessment MVP")
     
+    # Get username from query params if present
+    query_params = st.query_params
+    default_username = query_params.get('username', '')
+
     # Step 1: Get document and table IDs
-    username = st.text_input("Enter your username")
+    username = st.text_input("Enter your username", value=default_username)
 
     if username:
         # Fetch the user-specific document and table IDs from the central table
@@ -54,6 +58,22 @@ def main():
             user_prompt_session_table = user_row['user_prompt_session_table']
             user_skill_session_table = user_row['user_skill_session_table']  # Get the skill session table ID
             user_skills_table = user_row['user_skills_table']
+            # --- Display conversation, topics, and skills at the top ---
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.info("**Conversation Type:**")
+                st.write(user_row.get('demo_conversation', 'Not specified'))
+            with col2:
+                st.info("**Topics You're Working On:**")
+                topics = user_row.get('demo_topics', '')
+                for topic in [t.strip() for t in topics.split(',') if t.strip()]:
+                    st.write(f"• {topic}")
+            with col3:
+                st.info("**Skills You're Developing:**")
+                skills = user_row.get('demo_skills', '')
+                for skill in [s.strip() for s in skills.split(',') if s.strip()]:
+                    st.write(f"• {skill}")
+            st.markdown("---")
         else:
             st.warning("Username not found. Please check your username.")
             return
