@@ -44,7 +44,6 @@ def get_table_rows(doc_id: str, table_id: str):
     table = doc.get_table(table_id)
     rows = table.rows()
     return [row.to_dict() for row in rows]
-
 def get_user_data(username: str):
     """Get user data from demo users table"""
     rows = get_table_rows(DEMO_DOC_ID, DEMO_USERS_TABLE)
@@ -313,6 +312,15 @@ def run_main_app():
                         openai_api_key=openai_api_key
                     )
 
+                # DEBUG: Log raw feedback and extracted score for each skill
+                if skills_list:
+                    st.write('--- DEBUG: AI Skill Analysis Results ---')
+                    for result in skills_analysis_results:
+                        st.write(f"Skill: {result['skill']}")
+                        st.write(f"Raw Feedback: {result['feedback']}")
+                        st.write(f"Extracted Score: {result['score']}")
+                    st.write('--- END DEBUG ---')
+
                 # Update progress - Skills analyzed (80%)
                 progress_text.text("💾 Saving your results...")
                 progress_bar.progress(80)
@@ -503,25 +511,36 @@ def run_demo_app():
         all_prompts = get_table_rows(DEMO_DOC_ID, DEMO_PROMPTS_TABLE)
         user_prompts = [row for row in all_prompts if user_in_demo_user(row.get('demo_user', ''), username)]
 
-        # Pick a random prompt
-        prompt_row = random.choice(user_prompts) if user_prompts else None
-
         # Get all skills for the user
         all_skills = get_table_rows(DEMO_DOC_ID, DEMO_SKILLS_TABLE)
         user_skills = [row for row in all_skills if user_in_demo_user(row.get('demo_user', ''), username)]
 
-    # Step 2: Get and display a random prompt
+    # Step 2: Get and display a random prompt with session state management
     st.subheader("🎯 Your Practice Prompt")
-    if not prompt_row:
+    if not user_prompts:
         st.error("No prompts available for this user. Please check the demo_user column in your data.")
         return
+    
+    # Check if we need to select a new prompt (only if no prompt stored or user requests new one)
+    demo_prompt_key = f"demo_prompt_{username}"
+    if demo_prompt_key not in st.session_state:
+        # Select a random prompt from the user's prompts
+        st.session_state[demo_prompt_key] = random.choice(user_prompts)
+    
+    # Use the stored prompt
+    prompt_row = st.session_state[demo_prompt_key]
+    
     # Display context
     st.subheader("🏘️ Context of the situation:")
     st.write(prompt_row.get('prompt_context', 'No context available'))
+    
     # Add a button to get a new prompt
     col1, col2 = st.columns([3, 1])
     with col2:
         if st.button("🔄 New Prompt", help="Get a different random prompt"):
+            # Clear the stored prompt to force a new selection
+            if demo_prompt_key in st.session_state:
+                del st.session_state[demo_prompt_key]
             st.rerun()
     # Display audio if available
     audio_url = prompt_row.get('prompt_audio_url_txt', '')
@@ -641,56 +660,31 @@ def run_demo_app():
                         st.markdown("---")
             if not all_scores:
                 st.info("No skills found or failed to parse skills.")
-            current_time = datetime.datetime.now().strftime("%Y-%m-%d, %I:%M:%S %p")
-            prompt = prompt_row.get('prompt_text', '')
-            user_transcription = transcription
-            answer_duration = duration
-            try:
-                doc = Document(DEMO_DOC_ID, coda=coda)
-                conversation_row = {
-                    "username": username,
-                    "session_id": session_id,
-                    "date_time": current_time,
-                    "prompt": prompt,
-                    "user_transcription": user_transcription,
-                    "answer_duration": answer_duration,
-                    "wpm_score": wpm_score,
-                    "fluency_score": fluency_score,
-                    "vocabulary_score": vocabulary_score
-                }
-                conversation_table = doc.get_table(DEMO_CONVERSATIONS_TABLE)
-                conversation_table.upsert_row([Cell(column=key, value_storage=value) for key, value in conversation_row.items()])
-                skill_table = doc.get_table(DEMO_SKILL_SESSIONS_TABLE)
-                wpm_skill_row = {
-                    "username": username,
-                    "session_id": session_id,
-                    "date_time": current_time,
-                    "skill_name": "Fluency (WPM)",
-                    "skill_score": wpm_score,
-                    "skill_feedback": f"User spoke at {wpm} words per minute"
-                }
-                skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in wpm_skill_row.items()])
-                for result in skills_analysis_results:
-                    if result['skill'] != 'comprehension':
-                        skill_row = {
-                            "username": username,
-                            "session_id": session_id,
-                            "date_time": current_time,
-                            "skill_name": result['skill'],
-                            "skill_score": result['score'],
-                            "skill_feedback": result['feedback']
-                        }
-                        skill_table.upsert_row([Cell(column=key, value_storage=value) for key, value in skill_row.items()])
-                st.success(f"Results successfully saved! Session ID: {session_id}")
-                progress_text.text("✨ Analysis complete!")
-                progress_bar.progress(100)
-                st.balloons()
-            except Exception as e:
-                st.error(f"Error saving results: {str(e)}")
-                import traceback
-                tb_str = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
-                st.error("Traceback details:")
-                st.error(tb_str)
+            # --- Remove saving results to Coda for demo sessions ---
+            # The following block is removed:
+            # try:
+            #     doc = Document(DEMO_DOC_ID, coda=coda)
+            #     conversation_row = {...}
+            #     conversation_table = doc.get_table(DEMO_CONVERSATIONS_TABLE)
+            #     conversation_table.upsert_row([...])
+            #     skill_table = doc.get_table(DEMO_SKILL_SESSIONS_TABLE)
+            #     wpm_skill_row = {...}
+            #     skill_table.upsert_row([...])
+            #     for result in skills_analysis_results:
+            #         ...
+            #         skill_table.upsert_row([...])
+            #     st.success(...)
+            #     ...
+            # except Exception as e:
+            #     ...
+            # Instead, just show the success message and clear session state:
+            st.success(f"Demo analysis complete! (Results are not saved in demo mode)")
+            progress_text.text("✨ Analysis complete!")
+            progress_bar.progress(100)
+            st.balloons()
+            # Clear session state to allow for a fresh start with a new prompt
+            if demo_prompt_key in st.session_state:
+                del st.session_state[demo_prompt_key]
 
 def run_my_progress_app():
     """My Progress app functionality"""
