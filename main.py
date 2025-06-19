@@ -313,13 +313,13 @@ def run_main_app():
                     )
 
                 # DEBUG: Log raw feedback and extracted score for each skill
-                if skills_list:
-                    st.write('--- DEBUG: AI Skill Analysis Results ---')
-                    for result in skills_analysis_results:
-                        st.write(f"Skill: {result['skill']}")
-                        st.write(f"Raw Feedback: {result['feedback']}")
-                        st.write(f"Extracted Score: {result['score']}")
-                    st.write('--- END DEBUG ---')
+                # if skills_list:
+                #     st.write('--- DEBUG: AI Skill Analysis Results ---')
+                #     for result in skills_analysis_results:
+                #         st.write(f"Skill: {result['skill']}")
+                #         st.write(f"Raw Feedback: {result['feedback']}")
+                #         st.write(f"Extracted Score: {result['score']}")
+                #     st.write('--- END DEBUG ---')
 
                 # Update progress - Skills analyzed (80%)
                 progress_text.text("💾 Saving your results...")
@@ -354,6 +354,7 @@ def run_main_app():
                     cols = st.columns(len(row_scores))
                     
                     for j, score_data in enumerate(row_scores):
+                        st.write("score_data: ", score_data)
                         with cols[j]:
                             # Create a card-like container
                             st.markdown("---")
@@ -605,7 +606,49 @@ def run_demo_app():
             # Add the comprehension prompt
             comprehension_prompt = {
                 'skill_name': 'comprehension',
-                'skill_ai_prompt': 'evaluate the relevancy of the answer provided given the question was: '
+                'skill_ai_prompt': """
+You are a language evaluation assistant. Your task is to assess how well a student’s answer fits the question they were asked. This is about comprehension and contextual appropriateness, not grammar or vocabulary.
+
+Use the scale below to assign a score out of 100 based on how directly and appropriately the student responds to the question. This is not meant to be harsh — if the learner understood the question and gave a sensible response, the score should reflect that.
+
+📏 Scoring Guidelines:
+
+100–90 points → Fully Relevant
+The student clearly understood the question and gave an appropriate, contextually accurate response.
+Example:
+Q: Where are you from?
+A: I grew up in a small town in Italy. ✅
+
+89–75 points → Mostly Relevant
+The answer fits the general theme, but something is slightly off, missing, or vague.
+Example:
+Q: Where are you from?
+A: I’m currently living in France, but I’ve moved a lot. 🟡
+→ Not a bad answer, but not exactly the info asked.
+
+74–50 points → Somewhat Related
+The student didn’t fully understand the question but said something that keeps the conversation going.
+Example:
+Q: Where are you from?
+A: I work in marketing and I travel a lot. 🔄
+→ Confuses origin with occupation or lifestyle.
+
+49–25 points → Mostly Irrelevant
+The answer does not match the question and adds confusion.
+Example:
+Q: Where are you from?
+A: I like to cook pasta on Sundays. ❌
+
+24–0 points → Completely Off or Incoherent
+The student clearly didn’t understand the question and the response is not connected at all.
+
+🎯 Format your answer like this:
+
+Score: [__]/100
+Feedback:
+Explain briefly why the score was given. Was the student off-topic? Did they miss the point of the question? Or did they respond perfectly but with a minor omission?
+
+"""
             }
             comprehension_prompt['skill_ai_prompt'] += "Question: " + prompt_row.get('prompt_text', '') + ". And context: " + prompt_row.get('prompt_context', '')
             comprehension_prompt['skill_ai_prompt'] += "\n\nProvide feedback in English."
