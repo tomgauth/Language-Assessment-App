@@ -1,13 +1,14 @@
 # Pronunciation Evaluator App
 
-A simple Streamlit-based pronunciation assessment tool that uses SpeechSuper API to evaluate pronunciation accuracy for French and Russian languages.
+A simple Streamlit-based pronunciation assessment tool that uses Microsoft Azure Speech Services to evaluate pronunciation accuracy for French, Russian, and English languages.
 
 ## Features
 
 - **Simple Interface**: Clean, minimal UI with text input and audio recording
-- **Language Support**: French and Russian pronunciation assessment
-- **AI-Powered Assessment**: SpeechSuper API provides detailed pronunciation analysis
-- **JSON Results**: Raw API response displayed for easy integration
+- **Language Support**: French, Russian, and English pronunciation assessment
+- **AI-Powered Assessment**: Azure Speech Services provides detailed pronunciation analysis
+- **Multiple Scores**: Overall, fluency, completeness, and pronunciation scores
+- **Detailed Analysis**: Phoneme-level and word-level feedback
 - **Real-time Feedback**: Immediate pronunciation scoring and feedback
 
 ## Setup
@@ -26,41 +27,51 @@ streamlit run pronunciation_app.py
 
 ## How to Use
 
-1. **Select Language**: Choose between French or Russian
+1. **Select Language**: Choose between French, Russian, or English
 2. **Enter Text**: Type or paste the text you want to read aloud
 3. **Record Audio**: Click the microphone button and read the text
 4. **Get Assessment**: Click "Assess Pronunciation" to get your results
-5. **View Results**: See your score and detailed JSON response
+5. **View Results**: See your scores and detailed analysis
 
 ## API Integration
 
-The app uses SpeechSuper API with the following endpoints:
-- **French**: `para.eval.fr` - French scripted paragraph pronunciation assessment
-- **Russian**: `para.eval.ru` - Russian scripted paragraph pronunciation assessment
+The app uses Microsoft Azure Speech Services with the following features:
+- **Pronunciation Assessment**: Detailed scoring of pronunciation accuracy
+- **Multiple Metrics**: Overall, fluency, completeness, and pronunciation scores
+- **Phoneme Analysis**: Individual phoneme-level feedback
+- **Word Analysis**: Word-level accuracy assessment
+- **Text Comparison**: Reference text vs recognized text
 
 ### Audio Requirements
 
-- **Formats**: wav, mp3, opus, ogg, amr
+- **Formats**: WAV (automatically converted from browser recording)
 - **Channels**: Mono (1 channel)
-- **Sampling Rate**: 16000 Hz
-- **Bitrate**: At least 96 kbps
+- **Sampling Rate**: 16000 Hz (automatically handled)
 
 ### API Response Format
 
-The app returns the complete JSON response from SpeechSuper API, including:
-- Overall pronunciation score
-- Word-level scores (if requested)
-- Detailed feedback and analysis
+The app returns comprehensive results including:
+- Overall accuracy score
+- Fluency, completeness, and pronunciation scores
+- Recognized vs reference text comparison
+- Phoneme-level details with accuracy scores
+- Word-level details with accuracy scores
 
 ## Example Usage
 
 ```python
 # The app will display results like this:
 {
+  "success": true,
   "result": {
     "overall_score": 85.5,
-    "word_score": [...],
-    "feedback": "Excellent pronunciation overall..."
+    "fluency_score": 90.2,
+    "completeness_score": 88.7,
+    "pronunciation_score": 82.3,
+    "recognized_text": "Bonjour, comment ça va ?",
+    "reference_text": "Bonjour, comment ça va ?",
+    "phoneme_details": [...],
+    "word_details": [...]
   }
 }
 ```
@@ -68,8 +79,9 @@ The app returns the complete JSON response from SpeechSuper API, including:
 ## Troubleshooting
 
 - **Audio Issues**: Ensure your microphone is working and browser permissions are granted
-- **API Errors**: Check that the SpeechSuper credentials are correct
+- **API Errors**: Check that the Azure Speech Services credentials are correct
 - **Language Mismatch**: Make sure the selected language matches the text you're reading
+- **Dependencies**: Ensure all required packages are installed
 
 ## Development
 
@@ -77,4 +89,13 @@ This is a simplified version focused on core functionality. The app can be easil
 - Add more languages
 - Integrate with databases
 - Add user authentication
-- Implement result storage 
+- Implement result storage
+- Add progress tracking
+
+## Azure Speech Services Benefits
+
+- **Reliable**: Microsoft's enterprise-grade speech recognition
+- **Accurate**: State-of-the-art pronunciation assessment
+- **Multilingual**: Support for 100+ languages
+- **Detailed**: Phoneme and word-level analysis
+- **Scalable**: Cloud-based service with high availability 

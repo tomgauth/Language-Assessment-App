@@ -1,17 +1,13 @@
 import streamlit as st
-import requests
-import json
-import base64
-import io
-import time
-import hashlib
-import tempfile
 import os
+import tempfile
+import azure.cognitiveservices.speech as speechsdk
+import json
 
-# SpeechSuper API credentials
-SPEECHSUPER_APP_KEY = "17473823180004c9"
-SPEECHSUPER_SECRET_KEY = "e2f7f083346cc5a6ebdf8069dfe57398"
-SPEECHSUPER_BASE_URL = "https://api.speechsuper.com/"
+# Azure Speech Services credentials
+AZURE_SPEECH_KEY = "6Nk0XGWtuEsmRfGzBhJ2CGUseiZ9NKNCY8QIwukSxzZBkRq1a5CcJQQJ99BFAC5RqLJXJ3w3AAAYACOGUOFg"
+AZURE_SPEECH_REGION = "westeurope"
+AZURE_SPEECH_ENDPOINT = "https://westeurope.api.cognitive.microsoft.com/"
 
 def convert_audio_to_wav(audio_data):
     """Convert Streamlit audio data to WAV format and save to temporary file"""
@@ -39,175 +35,138 @@ def convert_audio_to_wav(audio_data):
         st.error(f"Error converting audio: {str(e)}")
         return None
 
-def call_speechsuper_api(audio_file_path: str, ref_text: str, language: str = "fr"):
-    """Call SpeechSuper API using the correct format with connect/start commands"""
+def call_azure_speech_api(audio_file_path: str, reference_text: str, language: str = "fr-FR"):
+    """Call Azure Speech Services for pronunciation assessment"""
     try:
-        # Determine coreType based on language
-        core_type = "para.eval.fr" if language == "fr" else "para.eval.ru"
-        
         # DEBUG: Log basic parameters
-        st.write("🔍 DEBUG: Basic parameters:")
+        st.write("🔍 DEBUG: Azure Speech API parameters:")
         st.write(f"  - Language: {language}")
-        st.write(f"  - Core type: {core_type}")
-        st.write(f"  - Reference text: {ref_text[:100]}{'...' if len(ref_text) > 100 else ''}")
+        st.write(f"  - Reference text: {reference_text[:100]}{'...' if len(reference_text) > 100 else ''}")
         st.write(f"  - Audio file path: {audio_file_path}")
+        st.write(f"  - Azure Key: {AZURE_SPEECH_KEY[:10]}...")
+        st.write(f"  - Azure Region: {AZURE_SPEECH_REGION}")
         
-        # Generate timestamp
-        timestamp = str(int(time.time()))
-        user_id = "guest"
+        # 1) Set up your subscription info
+        speech_key = AZURE_SPEECH_KEY
+        service_region = AZURE_SPEECH_REGION
         
-        # DEBUG: Log timestamp info
-        st.write("🔍 DEBUG: Timestamp info:")
-        st.write(f"  - Timestamp: {timestamp}")
-        st.write(f"  - User ID: {user_id}")
-        st.write(f"  - Current time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(timestamp)))}")
+        # 2) Configure speech
+        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+        audio_config = speechsdk.audio.AudioConfig(filename=audio_file_path)
         
-        # Generate signatures
-        connect_str = (SPEECHSUPER_APP_KEY + timestamp + SPEECHSUPER_SECRET_KEY).encode("utf-8")
-        connect_sig = hashlib.sha1(connect_str).hexdigest()
+        # DEBUG: Log speech config
+        st.write("🔍 DEBUG: Speech configuration:")
+        st.write(f"  - Speech config created: {speech_config is not None}")
+        st.write(f"  - Audio config created: {audio_config is not None}")
         
-        start_str = (SPEECHSUPER_APP_KEY + timestamp + user_id + SPEECHSUPER_SECRET_KEY).encode("utf-8")
-        start_sig = hashlib.sha1(start_str).hexdigest()
+        # 3) Set up Pronunciation Assessment
+        pronunciation_config = speechsdk.PronunciationAssessmentConfig(
+            reference_text=reference_text,
+            grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
+            granularity=speechsdk.PronunciationAssessmentGranularity.Phoneme,
+            enable_miscue=True
+        )
         
-        # DEBUG: Log signature generation
-        st.write("🔍 DEBUG: Signature generation:")
-        st.write(f"  - Connect string: {SPEECHSUPER_APP_KEY + timestamp + SPEECHSUPER_SECRET_KEY}")
-        st.write(f"  - Connect signature: {connect_sig}")
-        st.write(f"  - Start string: {SPEECHSUPER_APP_KEY + timestamp + user_id + SPEECHSUPER_SECRET_KEY}")
-        st.write(f"  - Start signature: {start_sig}")
+        # DEBUG: Log pronunciation config
+        st.write("🔍 DEBUG: Pronunciation configuration:")
+        st.write(f"  - Pronunciation config created: {pronunciation_config is not None}")
+        st.write(f"  - Reference text set: {reference_text[:50]}...")
         
-        # Prepare parameters
-        params = {
-            "connect": {
-                "cmd": "connect",
-                "param": {
-                    "sdk": {
-                        "version": 16777472,
-                        "source": 9,
-                        "protocol": 2
-                    },
-                    "app": {
-                        "applicationId": SPEECHSUPER_APP_KEY,
-                        "sig": connect_sig,
-                        "timestamp": timestamp
-                    }
-                }
-            },
-            "start": {
-                "cmd": "start",
-                "param": {
-                    "app": {
-                        "userId": user_id,
-                        "applicationId": SPEECHSUPER_APP_KEY,
-                        "timestamp": timestamp,
-                        "sig": start_sig
-                    },
-                    "audio": {
-                        "audioType": "wav",
-                        "channel": 1,
-                        "sampleBytes": 2,
-                        "sampleRate": 16000
-                    },
-                    "request": {
-                        "coreType": core_type,
-                        "refText": ref_text,
-                        "tokenId": "tokenId",
-                        "paragraph_need_word_score": 1  # Get word-level scores
-                    }
+        # 4) Create a recognizer and apply the pronunciation settings
+        recognizer = speechsdk.SpeechRecognizer(speech_config, audio_config)
+        pronunciation_config.apply_to(recognizer)
+        
+        # DEBUG: Log recognizer
+        st.write("🔍 DEBUG: Recognizer setup:")
+        st.write(f"  - Recognizer created: {recognizer is not None}")
+        st.write(f"  - Pronunciation config applied: True")
+        
+        # 5) Recognize once and get results
+        st.write("🔍 DEBUG: Starting recognition...")
+        result = recognizer.recognize_once()
+        
+        # DEBUG: Log recognition result
+        st.write("🔍 DEBUG: Recognition result:")
+        st.write(f"  - Result reason: {result.reason}")
+        st.write(f"  - Result text: {result.text}")
+        
+        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            # Get pronunciation assessment result
+            pa_result = speechsdk.PronunciationAssessmentResult(result)
+            
+            # DEBUG: Log pronunciation assessment
+            st.write("�� DEBUG: Pronunciation assessment:")
+            st.write(f"  - Accuracy score: {pa_result.accuracy_score}")
+            st.write(f"  - Fluency score: {pa_result.fluency_score}")
+            st.write(f"  - Completeness score: {pa_result.completeness_score}")
+            st.write(f"  - Pronunciation score: {pa_result.pronunciation_score}")
+            
+            # Prepare detailed results
+            phoneme_details = []
+            for pd in pa_result.phoneme_details:
+                phoneme_details.append({
+                    "phoneme": pd.phoneme,
+                    "accuracy_score": pd.accuracy_score,
+                    "error_type": pd.error_type
+                })
+            
+            # Create comprehensive result structure
+            api_response = {
+                "success": True,
+                "result": {
+                    "overall_score": pa_result.accuracy_score,
+                    "fluency_score": pa_result.fluency_score,
+                    "completeness_score": pa_result.completeness_score,
+                    "pronunciation_score": pa_result.pronunciation_score,
+                    "recognized_text": result.text,
+                    "reference_text": reference_text,
+                    "phoneme_details": phoneme_details,
+                    "word_details": []
                 }
             }
-        }
-        
-        # DEBUG: Log complete parameters structure
-        st.write("🔍 DEBUG: Complete parameters structure:")
-        st.json(params)
-        
-        # Convert params to JSON string
-        datas = json.dumps(params)
-        
-        # DEBUG: Log JSON data
-        st.write("🔍 DEBUG: JSON data:")
-        st.write(f"  - JSON length: {len(datas)} characters")
-        st.write(f"  - JSON preview: {datas[:200]}{'...' if len(datas) > 200 else ''}")
-        
-        # Prepare request data
-        data = {'text': datas}
-        headers = {"Request-Index": "0"}
-        
-        # DEBUG: Log request preparation
-        st.write("🔍 DEBUG: Request preparation:")
-        st.write(f"  - Data keys: {list(data.keys())}")
-        st.write(f"  - Headers: {headers}")
-        st.write(f"  - URL: {SPEECHSUPER_BASE_URL + core_type}")
-        
-        # Check if audio file exists and get its size
-        if os.path.exists(audio_file_path):
-            file_size = os.path.getsize(audio_file_path)
-            st.write(f"  - Audio file exists: Yes")
-            st.write(f"  - Audio file size: {file_size} bytes")
+            
+            # Add word-level details if available
+            if hasattr(pa_result, 'word_details'):
+                for wd in pa_result.word_details:
+                    api_response["result"]["word_details"].append({
+                        "word": wd.word,
+                        "accuracy_score": wd.accuracy_score,
+                        "error_type": wd.error_type
+                    })
+            
+            st.write("  - API response prepared successfully")
+            return api_response
+            
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            cancel = speechsdk.CancellationDetails(result)
+            st.error(f"Recognition canceled: {cancel.reason}")
+            if cancel.reason == speechsdk.CancellationReason.Error:
+                st.error(f"Error details: {cancel.error_details}")
+            
+            return {
+                "success": False,
+                "error": "Recognition canceled",
+                "error_details": cancel.error_details if cancel.reason == speechsdk.CancellationReason.Error else None
+            }
         else:
-            st.error(f"  - Audio file does not exist: {audio_file_path}")
-            return None
-        
-        # Open audio file
-        with open(audio_file_path, 'rb') as audio_file:
-            files = {"audio": audio_file}
-            
-            # DEBUG: Log file upload info
-            st.write("🔍 DEBUG: File upload info:")
-            st.write(f"  - Files dict keys: {list(files.keys())}")
-            st.write(f"  - Audio file object: {type(audio_file)}")
-            
-            # Make API request
-            url = SPEECHSUPER_BASE_URL + core_type
-            st.write(f"  - Making request to: {url}")
-            
-            response = requests.post(url, data=data, headers=headers, files=files)
-        
-        # DEBUG: Log response info
-        st.write("🔍 DEBUG: Response info:")
-        st.write(f"  - Status code: {response.status_code}")
-        st.write(f"  - Response headers: {dict(response.headers)}")
-        st.write(f"  - Response text length: {len(response.text)}")
-        st.write(f"  - Response text: {response.text}")
-        
-        # Clean up temporary file
-        try:
-            os.unlink(audio_file_path)
-            st.write("  - Temporary file cleaned up successfully")
-        except Exception as cleanup_error:
-            st.write(f"  - Cleanup error: {cleanup_error}")
-        
-        if response.status_code == 200:
-            try:
-                response_json = response.json()
-                st.write("  - Response parsed as JSON successfully")
-                return response_json
-            except json.JSONDecodeError as json_error:
-                st.error(f"  - JSON decode error: {json_error}")
-                st.write(f"  - Raw response: {response.text}")
-                return None
-        else:
-            st.error(f"API Error: {response.status_code} - {response.text}")
-            return None
+            st.error(f"Unexpected result reason: {result.reason}")
+            return {
+                "success": False,
+                "error": f"Unexpected result reason: {result.reason}"
+            }
             
     except Exception as e:
-        st.error(f"Error calling SpeechSuper API: {str(e)}")
+        st.error(f"Error calling Azure Speech API: {str(e)}")
         import traceback
         st.write("🔍 DEBUG: Full traceback:")
         st.write(traceback.format_exc())
-        
-        # Clean up temporary file on error
-        try:
-            if audio_file_path and os.path.exists(audio_file_path):
-                os.unlink(audio_file_path)
-                st.write("  - Temporary file cleaned up after error")
-        except:
-            pass
-        return None
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 def main():
-    """Simple pronunciation evaluator app"""
+    """Simple pronunciation evaluator app using Azure Speech Services"""
     st.set_page_config(
         page_title="Pronunciation Evaluator",
         page_icon="🎤",
@@ -215,17 +174,17 @@ def main():
     )
     
     st.title("🎤 Pronunciation Evaluator")
-    st.markdown("**Simple pronunciation assessment using SpeechSuper API**")
+    st.markdown("**Simple pronunciation assessment using Microsoft Azure Speech Services**")
     
     # Language selection
     language = st.selectbox(
         "Select language:",
-        ["French", "Russian"],
-        format_func=lambda x: "🇫🇷 French" if x == "French" else "🇷🇺 Russian"
+        ["French", "Russian", "English"],
+        format_func=lambda x: "🇫🇷 French" if x == "French" else "🇷🇺 Russian" if x == "Russian" else "🇺🇸 English"
     )
     
-    # Get language code for API
-    lang_code = "fr" if language == "French" else "ru"
+    # Get language code for Azure API
+    lang_code = "fr-FR" if language == "French" else "ru-RU" if language == "Russian" else "en-US"
     
     st.markdown("---")
     
@@ -266,15 +225,24 @@ def main():
                     st.error("Failed to convert audio format")
                     return
                 
-                # Call SpeechSuper API
-                api_response = call_speechsuper_api(
+                # Call Azure Speech API
+                api_response = call_azure_speech_api(
                     audio_file_path=audio_file_path,
-                    ref_text=paragraph,
+                    reference_text=paragraph,
                     language=lang_code
                 )
                 
-                if not api_response:
+                # Clean up temporary file
+                try:
+                    os.unlink(audio_file_path)
+                    st.write("  - Temporary file cleaned up successfully")
+                except Exception as cleanup_error:
+                    st.write(f"  - Cleanup error: {cleanup_error}")
+                
+                if not api_response or not api_response.get("success", False):
                     st.error("Failed to get pronunciation assessment")
+                    if api_response and "error" in api_response:
+                        st.error(f"Error: {api_response['error']}")
                     return
                 
                 # Display results
@@ -284,18 +252,87 @@ def main():
                 st.subheader("📊 Assessment Results:")
                 st.json(api_response)
                 
-                # Also show a simple summary if available
+                # Show detailed summary
                 if 'result' in api_response:
                     result = api_response['result']
+                    
+                    st.subheader("🎯 Detailed Summary:")
+                    
+                    # Create columns for scores
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric(
+                            label="Overall Score",
+                            value=f"{result.get('overall_score', 0):.1f}/100"
+                        )
+                    
+                    with col2:
+                        st.metric(
+                            label="Fluency",
+                            value=f"{result.get('fluency_score', 0):.1f}/100"
+                        )
+                    
+                    with col3:
+                        st.metric(
+                            label="Completeness",
+                            value=f"{result.get('completeness_score', 0):.1f}/100"
+                        )
+                    
+                    with col4:
+                        st.metric(
+                            label="Pronunciation",
+                            value=f"{result.get('pronunciation_score', 0):.1f}/100"
+                        )
+                    
+                    # Show recognized vs reference text
+                    st.subheader("📝 Text Comparison:")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**Reference Text:**")
+                        st.write(result.get('reference_text', ''))
+                    
+                    with col2:
+                        st.markdown("**Recognized Text:**")
+                        st.write(result.get('recognized_text', ''))
+                    
+                    # Show phoneme details if available
+                    if result.get('phoneme_details'):
+                        st.subheader("🔤 Phoneme Details:")
+                        phoneme_data = []
+                        for pd in result['phoneme_details']:
+                            phoneme_data.append({
+                                "Phoneme": pd['phoneme'],
+                                "Accuracy": f"{pd['accuracy_score']:.1f}",
+                                "Error Type": pd.get('error_type', 'None')
+                            })
+                        
+                        if phoneme_data:
+                            import pandas as pd
+                            df = pd.DataFrame(phoneme_data)
+                            st.dataframe(df, use_container_width=True)
+                    
+                    # Show word details if available
+                    if result.get('word_details'):
+                        st.subheader("📚 Word Details:")
+                        word_data = []
+                        for wd in result['word_details']:
+                            word_data.append({
+                                "Word": wd['word'],
+                                "Accuracy": f"{wd['accuracy_score']:.1f}",
+                                "Error Type": wd.get('error_type', 'None')
+                            })
+                        
+                        if word_data:
+                            import pandas as pd
+                            df = pd.DataFrame(word_data)
+                            st.dataframe(df, use_container_width=True)
+                    
+                    # Overall feedback
                     overall_score = result.get('overall_score', 0)
+                    st.subheader("💡 Feedback:")
                     
-                    st.subheader("🎯 Summary:")
-                    st.metric(
-                        label="Overall Score",
-                        value=f"{overall_score:.1f}/100"
-                    )
-                    
-                    # Simple feedback based on score
                     if overall_score >= 80:
                         st.success("Excellent pronunciation! 🎉")
                     elif overall_score >= 60:
@@ -306,4 +343,4 @@ def main():
                         st.error("Pronunciation needs work - don't give up! 🔄")
 
 if __name__ == "__main__":
-    main() 
+    main()
