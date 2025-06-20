@@ -3,46 +3,111 @@ import requests
 import json
 import base64
 import io
+import time
+import hashlib
+import tempfile
+import os
 
 # SpeechSuper API credentials
 SPEECHSUPER_APP_KEY = "17473823180004c9"
 SPEECHSUPER_SECRET_KEY = "e2f7f083346cc5a6ebdf8069dfe57398"
 SPEECHSUPER_BASE_URL = "https://api.speechsuper.com/"
 
-def convert_audio_to_speechsuper_format(audio_data):
-    """Convert Streamlit audio data to SpeechSuper format"""
+def convert_audio_to_wav(audio_data):
+    """Convert Streamlit audio data to WAV format and save to temporary file"""
     try:
-        # Convert audio data to base64
+        # Read audio data
         audio_bytes = audio_data.read()
-        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
         
-        return audio_base64
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+            temp_file.write(audio_bytes)
+            temp_file_path = temp_file.name
+        
+        return temp_file_path
     except Exception as e:
         st.error(f"Error converting audio: {str(e)}")
         return None
 
-def call_speechsuper_api(audio_base64: str, paragraph: str, language: str = "fr"):
-    """Call SpeechSuper API for pronunciation assessment"""
+def call_speechsuper_api(audio_file_path: str, ref_text: str, language: str = "fr"):
+    """Call SpeechSuper API using the correct format with connect/start commands"""
     try:
         # Determine coreType based on language
         core_type = "para.eval.fr" if language == "fr" else "para.eval.ru"
         
-        # Prepare request payload
-        payload = {
-            "appKey": SPEECHSUPER_APP_KEY,
-            "secretKey": SPEECHSUPER_SECRET_KEY,
-            "coreType": core_type,
-            "audio": audio_base64,
-            "text": paragraph,
-            "paragraph_need_word_score": 1  # Get word-level scores
+        # Generate timestamp
+        timestamp = str(int(time.time()))
+        user_id = "guest"
+        
+        # Generate signatures
+        connect_str = (SPEECHSUPER_APP_KEY + timestamp + SPEECHSUPER_SECRET_KEY).encode("utf-8")
+        connect_sig = hashlib.sha1(connect_str).hexdigest()
+        
+        start_str = (SPEECHSUPER_APP_KEY + timestamp + user_id + SPEECHSUPER_SECRET_KEY).encode("utf-8")
+        start_sig = hashlib.sha1(start_str).hexdigest()
+        
+        # Prepare parameters
+        params = {
+            "connect": {
+                "cmd": "connect",
+                "param": {
+                    "sdk": {
+                        "version": 16777472,
+                        "source": 9,
+                        "protocol": 2
+                    },
+                    "app": {
+                        "applicationId": SPEECHSUPER_APP_KEY,
+                        "sig": connect_sig,
+                        "timestamp": timestamp
+                    }
+                }
+            },
+            "start": {
+                "cmd": "start",
+                "param": {
+                    "app": {
+                        "userId": user_id,
+                        "applicationId": SPEECHSUPER_APP_KEY,
+                        "timestamp": timestamp,
+                        "sig": start_sig
+                    },
+                    "audio": {
+                        "audioType": "wav",
+                        "channel": 1,
+                        "sampleBytes": 2,
+                        "sampleRate": 16000
+                    },
+                    "request": {
+                        "coreType": core_type,
+                        "refText": ref_text,
+                        "tokenId": "tokenId",
+                        "paragraph_need_word_score": 1  # Get word-level scores
+                    }
+                }
+            }
         }
         
-        # Make API request
-        response = requests.post(
-            SPEECHSUPER_BASE_URL + "para.eval",
-            json=payload,
-            headers={'Content-Type': 'application/json'}
-        )
+        # Convert params to JSON string
+        datas = json.dumps(params)
+        
+        # Prepare request data
+        data = {'text': datas}
+        headers = {"Request-Index": "0"}
+        
+        # Open audio file
+        with open(audio_file_path, 'rb') as audio_file:
+            files = {"audio": audio_file}
+            
+            # Make API request
+            url = SPEECHSUPER_BASE_URL + core_type
+            response = requests.post(url, data=data, headers=headers, files=files)
+        
+        # Clean up temporary file
+        try:
+            os.unlink(audio_file_path)
+        except:
+            pass
         
         if response.status_code == 200:
             return response.json()
@@ -52,6 +117,12 @@ def call_speechsuper_api(audio_base64: str, paragraph: str, language: str = "fr"
             
     except Exception as e:
         st.error(f"Error calling SpeechSuper API: {str(e)}")
+        # Clean up temporary file on error
+        try:
+            if audio_file_path and os.path.exists(audio_file_path):
+                os.unlink(audio_file_path)
+        except:
+            pass
         return None
 
 def main():
@@ -107,17 +178,17 @@ def main():
             # Show progress
             with st.spinner("Processing pronunciation assessment..."):
                 
-                # Convert audio to SpeechSuper format
-                audio_base64 = convert_audio_to_speechsuper_format(audio_data)
+                # Convert audio to WAV file
+                audio_file_path = convert_audio_to_wav(audio_data)
                 
-                if not audio_base64:
+                if not audio_file_path:
                     st.error("Failed to convert audio format")
                     return
                 
                 # Call SpeechSuper API
                 api_response = call_speechsuper_api(
-                    audio_base64=audio_base64,
-                    paragraph=paragraph,
+                    audio_file_path=audio_file_path,
+                    ref_text=paragraph,
                     language=lang_code
                 )
                 
