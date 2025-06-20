@@ -57,7 +57,17 @@ def get_user_learning_data(username: str) -> Dict[str, Any]:
             'demo_skills': user_row.get('demo_skills', ''),
             'prompts': user_row.get('prompts', ''),
             'num_sentence_recall': user_row.get('num_sentence_recall', 0),
-            'num_sentences_recognize': user_row.get('num_sentences_recognize', 0)
+            'num_sentences_recognize': user_row.get('num_sentences_recognize', 0),
+            'program_duration': user_row.get('program_duration', 90),
+            'current_wpm': user_row.get('current_wpm', 60),
+            'start_date': user_row.get('start_date', ''),
+            'target_wpm': user_row.get('target_wpm', 100),
+            'conversation_1': user_row.get('conversation_1', ''),
+            'conversation_1_goals': user_row.get('conversation_1_goals', ''),
+            'conversation_2': user_row.get('conversation_2', ''),
+            'conversation_2_goals': user_row.get('conversation_2_goals', ''),
+            'conversation_3': user_row.get('conversation_3', ''),
+            'conversation_3_goals': user_row.get('conversation_3_goals', '')
         }
     except Exception as e:
         print(f"Error fetching user data: {e}")
@@ -93,10 +103,39 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
     start_date = user_row.get('start_date', '')
     target_wpm = user_row.get('target_wpm', 100)
     
+    # Extract conversation data
+    conversation_1 = user_row.get('conversation_1', '')
+    conversation_1_goals = user_row.get('conversation_1_goals', '')
+    conversation_2 = user_row.get('conversation_2', '')
+    conversation_2_goals = user_row.get('conversation_2_goals', '')
+    conversation_3 = user_row.get('conversation_3', '')
+    conversation_3_goals = user_row.get('conversation_3_goals', '')
+    
     # Parse topics and skills
     topic_list = [topic.strip() for topic in topics.split(',') if topic.strip()] if topics else ['General Topics']
     skill_list = [skill.strip() for skill in skills.split(',') if skill.strip()] if skills else ['Basic Communication']
     prompt_list = [prompt.strip() for prompt in prompts.split(',') if prompt.strip()] if prompts else []
+    
+    # Create conversation breakdown
+    conversations = []
+    if conversation_1:
+        conversations.append({
+            'title': conversation_1,
+            'goals': conversation_1_goals,
+            'type': 'Foundation'
+        })
+    if conversation_2:
+        conversations.append({
+            'title': conversation_2,
+            'goals': conversation_2_goals,
+            'type': 'Intermediate'
+        })
+    if conversation_3:
+        conversations.append({
+            'title': conversation_3,
+            'goals': conversation_3_goals,
+            'type': 'Advanced'
+        })
     
     # Estimate sentences per topic and skill
     topic_sentences = estimate_sentences_per_topic(topic_list, num_sentence_recall, num_sentences_recognize)
@@ -137,6 +176,7 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
         'topics': topic_list,
         'skills': skill_list,
         'prompts': prompt_list,
+        'conversations': conversations,
         'topic_sentences': topic_sentences,
         'skill_sentences': skill_sentences,
         'total_hours': program_duration * 1.5,  # 1.5 hours per day
@@ -348,7 +388,8 @@ def get_default_learning_plan_data() -> Dict[str, Any]:
         'conversation_type': 'General Conversation',
         'total_days': 90,
         'target_level': 'B2+',
-        'target_wpm': 100
+        'target_wpm': 100,
+        'start_date': ''
     }
     learning_data = {
         'conversation_type': 'General Conversation',
@@ -363,11 +404,19 @@ def get_default_learning_plan_data() -> Dict[str, Any]:
         'expected_sentences_known': 1050,
         'expected_final_wpm': 100,
         'current_wpm': 60,
-        'fluency_improvement': 40
+        'fluency_improvement': 40,
+        'start_date': ''
     }
     content = {
         'topics': ['General Topics'],
         'skills': ['Basic Communication'],
+        'conversations': [
+            {
+                'title': 'Basic Introductions',
+                'goals': '* Introduce yourself confidently\n* Ask and answer basic questions\n* Use common greetings',
+                'type': 'Foundation'
+            }
+        ],
         'total_hours': 135,
         'sessions_per_week': 7,
         'hours_per_session': 1.5
@@ -439,6 +488,20 @@ def generate_milestones(learning_data: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def generate_learning_summary(user_info: Dict[str, Any], learning_data: Dict[str, Any], content: Dict[str, Any]) -> str:
     """Generate learning plan summary text"""
+    # Build conversation goals section
+    conversation_goals = ""
+    if content.get('conversations'):
+        conversation_goals = "\n**Conversation Goals:**\n"
+        for i, conv in enumerate(content['conversations'], 1):
+            conversation_goals += f"- **{conv['type']} Level:** {conv['title']}\n"
+            if conv['goals']:
+                # Format goals as bullet points
+                goals_list = conv['goals'].split('*')
+                for goal in goals_list:
+                    goal = goal.strip()
+                    if goal:
+                        conversation_goals += f"  - {goal}\n"
+    
     return f"""
     **Personalized Learning Plan for {user_info['username']}**
     
@@ -447,12 +510,14 @@ def generate_learning_summary(user_info: Dict[str, Any], learning_data: Dict[str
     - **Current Level:** {user_info['current_level']}
     - **Current Fluency:** {user_info['current_wpm']} WPM
     - **Conversation Type:** {user_info['conversation_type']}
+    - **Target Fluency:** {learning_data['expected_final_wpm']} WPM
     
     **Learning Objectives:**
     - Master {learning_data['sentences_to_recall']} sentences for active recall
     - Recognize {learning_data['sentences_to_recognize']} sentences passively
     - Achieve {learning_data['expected_final_wpm']} WPM fluency
     - Develop {len(content['skills'])} key language skills
+    - Practice {len(content['conversations'])} conversation types{conversation_goals}
     
     **Our Advanced Methodology:**
     - **FSRS Algorithm:** Machine learning increases learning speed by 3.5x compared to conventional methods
