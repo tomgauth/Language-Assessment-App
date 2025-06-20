@@ -251,7 +251,9 @@ def run_main_app():
                 
                 # Create a temporary file for the audio
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-                    tmp_file.write(audio_data)
+                    # Read the audio data from the UploadedFile object
+                    audio_bytes = audio_data.read()
+                    tmp_file.write(audio_bytes)
                     temp_audio_path = tmp_file.name
 
                 # Run phonetic analysis
@@ -630,7 +632,9 @@ def run_demo_app():
             
             # Create a temporary file for the audio
             with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-                tmp_file.write(audio_data)
+                # Read the audio data from the UploadedFile object
+                audio_bytes = audio_data.read()
+                tmp_file.write(audio_bytes)
                 temp_audio_path = tmp_file.name
 
             # Run phonetic analysis
