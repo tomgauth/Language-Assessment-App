@@ -19,10 +19,20 @@ def convert_audio_to_wav(audio_data):
         # Read audio data
         audio_bytes = audio_data.read()
         
+        # DEBUG: Log audio data info
+        st.write("🔍 DEBUG: Audio data info:")
+        st.write(f"  - Audio data type: {type(audio_data)}")
+        st.write(f"  - Audio bytes length: {len(audio_bytes)}")
+        st.write(f"  - Audio data name: {getattr(audio_data, 'name', 'No name')}")
+        
         # Create temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
             temp_file.write(audio_bytes)
             temp_file_path = temp_file.name
+        
+        # DEBUG: Log file creation
+        st.write(f"  - Temporary file created: {temp_file_path}")
+        st.write(f"  - File size: {os.path.getsize(temp_file_path)} bytes")
         
         return temp_file_path
     except Exception as e:
@@ -35,9 +45,22 @@ def call_speechsuper_api(audio_file_path: str, ref_text: str, language: str = "f
         # Determine coreType based on language
         core_type = "para.eval.fr" if language == "fr" else "para.eval.ru"
         
+        # DEBUG: Log basic parameters
+        st.write("🔍 DEBUG: Basic parameters:")
+        st.write(f"  - Language: {language}")
+        st.write(f"  - Core type: {core_type}")
+        st.write(f"  - Reference text: {ref_text[:100]}{'...' if len(ref_text) > 100 else ''}")
+        st.write(f"  - Audio file path: {audio_file_path}")
+        
         # Generate timestamp
         timestamp = str(int(time.time()))
         user_id = "guest"
+        
+        # DEBUG: Log timestamp info
+        st.write("🔍 DEBUG: Timestamp info:")
+        st.write(f"  - Timestamp: {timestamp}")
+        st.write(f"  - User ID: {user_id}")
+        st.write(f"  - Current time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(timestamp)))}")
         
         # Generate signatures
         connect_str = (SPEECHSUPER_APP_KEY + timestamp + SPEECHSUPER_SECRET_KEY).encode("utf-8")
@@ -45,6 +68,13 @@ def call_speechsuper_api(audio_file_path: str, ref_text: str, language: str = "f
         
         start_str = (SPEECHSUPER_APP_KEY + timestamp + user_id + SPEECHSUPER_SECRET_KEY).encode("utf-8")
         start_sig = hashlib.sha1(start_str).hexdigest()
+        
+        # DEBUG: Log signature generation
+        st.write("🔍 DEBUG: Signature generation:")
+        st.write(f"  - Connect string: {SPEECHSUPER_APP_KEY + timestamp + SPEECHSUPER_SECRET_KEY}")
+        st.write(f"  - Connect signature: {connect_sig}")
+        st.write(f"  - Start string: {SPEECHSUPER_APP_KEY + timestamp + user_id + SPEECHSUPER_SECRET_KEY}")
+        st.write(f"  - Start signature: {start_sig}")
         
         # Prepare parameters
         params = {
@@ -88,39 +118,90 @@ def call_speechsuper_api(audio_file_path: str, ref_text: str, language: str = "f
             }
         }
         
+        # DEBUG: Log complete parameters structure
+        st.write("🔍 DEBUG: Complete parameters structure:")
+        st.json(params)
+        
         # Convert params to JSON string
         datas = json.dumps(params)
+        
+        # DEBUG: Log JSON data
+        st.write("🔍 DEBUG: JSON data:")
+        st.write(f"  - JSON length: {len(datas)} characters")
+        st.write(f"  - JSON preview: {datas[:200]}{'...' if len(datas) > 200 else ''}")
         
         # Prepare request data
         data = {'text': datas}
         headers = {"Request-Index": "0"}
         
+        # DEBUG: Log request preparation
+        st.write("🔍 DEBUG: Request preparation:")
+        st.write(f"  - Data keys: {list(data.keys())}")
+        st.write(f"  - Headers: {headers}")
+        st.write(f"  - URL: {SPEECHSUPER_BASE_URL + core_type}")
+        
+        # Check if audio file exists and get its size
+        if os.path.exists(audio_file_path):
+            file_size = os.path.getsize(audio_file_path)
+            st.write(f"  - Audio file exists: Yes")
+            st.write(f"  - Audio file size: {file_size} bytes")
+        else:
+            st.error(f"  - Audio file does not exist: {audio_file_path}")
+            return None
+        
         # Open audio file
         with open(audio_file_path, 'rb') as audio_file:
             files = {"audio": audio_file}
             
+            # DEBUG: Log file upload info
+            st.write("🔍 DEBUG: File upload info:")
+            st.write(f"  - Files dict keys: {list(files.keys())}")
+            st.write(f"  - Audio file object: {type(audio_file)}")
+            
             # Make API request
             url = SPEECHSUPER_BASE_URL + core_type
+            st.write(f"  - Making request to: {url}")
+            
             response = requests.post(url, data=data, headers=headers, files=files)
+        
+        # DEBUG: Log response info
+        st.write("🔍 DEBUG: Response info:")
+        st.write(f"  - Status code: {response.status_code}")
+        st.write(f"  - Response headers: {dict(response.headers)}")
+        st.write(f"  - Response text length: {len(response.text)}")
+        st.write(f"  - Response text: {response.text}")
         
         # Clean up temporary file
         try:
             os.unlink(audio_file_path)
-        except:
-            pass
+            st.write("  - Temporary file cleaned up successfully")
+        except Exception as cleanup_error:
+            st.write(f"  - Cleanup error: {cleanup_error}")
         
         if response.status_code == 200:
-            return response.json()
+            try:
+                response_json = response.json()
+                st.write("  - Response parsed as JSON successfully")
+                return response_json
+            except json.JSONDecodeError as json_error:
+                st.error(f"  - JSON decode error: {json_error}")
+                st.write(f"  - Raw response: {response.text}")
+                return None
         else:
             st.error(f"API Error: {response.status_code} - {response.text}")
             return None
             
     except Exception as e:
         st.error(f"Error calling SpeechSuper API: {str(e)}")
+        import traceback
+        st.write("🔍 DEBUG: Full traceback:")
+        st.write(traceback.format_exc())
+        
         # Clean up temporary file on error
         try:
             if audio_file_path and os.path.exists(audio_file_path):
                 os.unlink(audio_file_path)
+                st.write("  - Temporary file cleaned up after error")
         except:
             pass
         return None
