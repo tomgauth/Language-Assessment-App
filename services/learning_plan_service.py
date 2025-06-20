@@ -102,6 +102,10 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
     num_sentences_recognize = user_row.get('num_sentences_recognize', 700)
     start_date = user_row.get('start_date', '')
     target_wpm = user_row.get('target_wpm', 100)
+    level = user_row.get('level', 'A2')
+    current_wpm = user_row.get('current_wpm', 60)
+    target_wpm = user_row.get('target_wpm', 100)
+
     
     # Extract conversation data
     conversation_1 = user_row.get('conversation_1', '')
@@ -162,11 +166,10 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
     # User information
     user_info = {
         'username': username,
-        'current_level': 'B1',  # Current level B1
+        'current_level': level,  # Current level B1
         'current_wpm': current_wpm,
         'conversation_type': conversation_type,
         'total_days': program_duration,
-        'target_level': 'B2+',
         'target_wpm': target_wpm,
         'start_date': start_date
     }
@@ -198,7 +201,7 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
         },
         'fluency_impact': {
             'traditional': 20,
-            'our_method': target_wpm - current_wpm,
+            'our_method': 40, # we assume 40 WPM improvement
             'improvement': 2.0
         },
         'comprehension_impact': {
@@ -334,7 +337,7 @@ def generate_90_day_progress_data(learning_data: Dict[str, Any]) -> Dict[str, An
     target_communication = 95  # Target communication skills score
     
     # Starting values
-    start_fluency = 60  # Starting WPM (B1 level)
+    start_fluency = learning_data['current_wpm']  # Starting WPM (B1 level)
     start_communication = 30  # Starting communication score
     
     # Generate 90 days of data
@@ -379,15 +382,13 @@ def generate_90_day_progress_data(learning_data: Dict[str, Any]) -> Dict[str, An
         }
     }
 
-def get_default_learning_plan_data() -> Dict[str, Any]:
     """Return default learning plan data when user is not found"""
     user_info = {
         'username': 'Demo User',
         'current_level': 'B1',
-        'current_wpm': 60,
+        'current_wpm': current_wpm,
         'conversation_type': 'General Conversation',
-        'total_days': 90,
-        'target_level': 'B2+',
+        'total_days': 90,        
         'target_wpm': 100,
         'start_date': ''
     }
@@ -395,17 +396,17 @@ def get_default_learning_plan_data() -> Dict[str, Any]:
         'conversation_type': 'General Conversation',
         'difficulty': 'Intermediate',
         'learning_days': 90,
-        'sentences_to_recall': 350,
-        'sentences_to_recognize': 700,
-        'total_sentences': 1050,
+        'sentences_to_recall': num_sentence_recall,
+        'sentences_to_recognize': num_sentence_recognize,
+        'total_sentences': num_sentence_recall + num_sentence_recognize,
         'traditional_speed': 3,
         'fsrs_speed': 10.5,
         'new_sentences_per_day': 12,
-        'expected_sentences_known': 1050,
-        'expected_final_wpm': 100,
-        'current_wpm': 60,
-        'fluency_improvement': 40,
-        'start_date': ''
+        'expected_sentences_known': num_sentence_recall + num_sentence_recognize,
+        'expected_final_wpm': target_wpm,
+        'current_wpm': current_wpm,
+        'fluency_improvement': target_wpm - current_wpm,
+        'start_date': start_date
     }
     content = {
         'topics': ['General Topics'],
@@ -466,21 +467,34 @@ def generate_milestones(learning_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     current_date = datetime.now()
     learning_days = learning_data['learning_days']
     
+    # Calculate milestone dates based on duration
+    first_milestone_days = learning_days // 3
+    second_milestone_days = learning_days * 2 // 3
+    final_milestone_days = learning_days
+    
+    # Calculate sentence targets for each milestone
+    first_recall = learning_data["sentences_to_recall"] // 3
+    first_recognize = learning_data["sentences_to_recognize"] // 3
+    second_recall = learning_data["sentences_to_recall"] * 2 // 3
+    second_recognize = learning_data["sentences_to_recognize"] * 2 // 3
+    final_recall = learning_data["sentences_to_recall"]
+    final_recognize = learning_data["sentences_to_recognize"]
+    
     milestones = [
         {
-            'date': current_date + timedelta(days=learning_days // 3),
-            'milestone': 'Complete Foundation Phase',
-            'description': f'Master {learning_data["sentences_to_recall"] // 3} recall sentences and {learning_data["sentences_to_recognize"] // 3} recognition sentences'
+            'date': current_date + timedelta(days=first_milestone_days),
+            'milestone': f'Complete {first_milestone_days}-Day Phase',
+            'description': f'Master {first_recall} recall sentences and {first_recognize} recognition sentences'
         },
         {
-            'date': current_date + timedelta(days=learning_days * 2 // 3),
-            'milestone': 'Complete Intermediate Phase',
-            'description': f'Master {learning_data["sentences_to_recall"] * 2 // 3} recall sentences and {learning_data["sentences_to_recognize"] * 2 // 3} recognition sentences'
+            'date': current_date + timedelta(days=second_milestone_days),
+            'milestone': f'Complete {second_milestone_days}-Day Phase',
+            'description': f'Master {second_recall} recall sentences and {second_recognize} recognition sentences'
         },
         {
-            'date': current_date + timedelta(days=learning_days),
-            'milestone': 'Complete Advanced Program',
-            'description': f'Expected to know {learning_data["sentences_to_recall"] + learning_data["sentences_to_recognize"]} sentences and achieve {learning_data["expected_final_wpm"]} WPM fluency'
+            'date': current_date + timedelta(days=final_milestone_days),
+            'milestone': f'Complete {final_milestone_days}-Day Program',
+            'description': f'Expected to know {final_recall + final_recognize} sentences and achieve {learning_data["expected_final_wpm"]} WPM fluency'
         }
     ]
     
@@ -522,7 +536,7 @@ def generate_learning_summary(user_info: Dict[str, Any], learning_data: Dict[str
     **Our Advanced Methodology:**
     - **FSRS Algorithm:** Machine learning increases learning speed by 3.5x compared to conventional methods
     - **Audio Comprehension:** Incredible impact on comprehension and practice speed
-    - **Fluency Analyzer:** 2x impact on fluency (typically 60 WPM at B1 to 100 WPM after practice)
+    - **Fluency Analyzer:** 2x impact on fluency (typically 60 WPM at A2 to 100 WPM after practice)
     - **DIRECT Method:** High impact on communication and confidence with trained teachers
     
     **Expected Outcomes:**
