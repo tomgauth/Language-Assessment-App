@@ -126,19 +126,19 @@ def generate_learning_plan_data(username: str) -> Dict[str, Any]:
         conversations.append({
             'title': conversation_1,
             'goals': conversation_1_goals,
-            'type': 'Foundation'
+            'type': f"{program_duration // 3}-Day Phase"
         })
     if conversation_2:
         conversations.append({
             'title': conversation_2,
             'goals': conversation_2_goals,
-            'type': 'Intermediate'
+            'type': f"{program_duration * 2 // 3}-Day Phase"
         })
     if conversation_3:
         conversations.append({
             'title': conversation_3,
             'goals': conversation_3_goals,
-            'type': 'Advanced'
+            'type': f"{program_duration}-Day Program"
         })
     
     # Estimate sentences per topic and skill
@@ -415,7 +415,7 @@ def generate_90_day_progress_data(learning_data: Dict[str, Any]) -> Dict[str, An
             {
                 'title': 'Basic Introductions',
                 'goals': '* Introduce yourself confidently\n* Ask and answer basic questions\n* Use common greetings',
-                'type': 'Foundation'
+                'type': '30-Day Phase'
             }
         ],
         'total_hours': 135,
@@ -507,7 +507,18 @@ def generate_learning_summary(user_info: Dict[str, Any], learning_data: Dict[str
     if content.get('conversations'):
         conversation_goals = "\n**Conversation Goals:**\n"
         for i, conv in enumerate(content['conversations'], 1):
-            conversation_goals += f"- **{conv['type']} Level:** {conv['title']}\n"
+            # Calculate duration for this conversation phase
+            if i == 1:
+                phase_days = learning_data['learning_days'] // 3
+                phase_name = f"{phase_days}-Day Phase"
+            elif i == 2:
+                phase_days = learning_data['learning_days'] * 2 // 3
+                phase_name = f"{phase_days}-Day Phase"
+            else:
+                phase_days = learning_data['learning_days']
+                phase_name = f"{phase_days}-Day Program"
+            
+            conversation_goals += f"- **{phase_name}:** {conv['title']}\n"
             if conv['goals']:
                 # Format goals as bullet points
                 goals_list = conv['goals'].split('*')
