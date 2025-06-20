@@ -245,28 +245,12 @@ def run_main_app():
                 progress_text.text("🎤 Analyzing pronunciation...")
                 progress_bar.progress(35)
 
-                # Save audio file temporarily for phonetic analysis
-                import tempfile
-                import os
-                
-                # Create a temporary file for the audio
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-                    # Read the audio data from the UploadedFile object
-                    audio_bytes = audio_data.read()
-                    tmp_file.write(audio_bytes)
-                    temp_audio_path = tmp_file.name
-
-                # Run phonetic analysis
+                # Run phonetic analysis directly with audio bytes
                 phonetic_results = None
                 try:
-                    phonetic_results = phonetic_analysis_skill(temp_audio_path)
-                    # Clean up temporary file
-                    os.unlink(temp_audio_path)
+                    phonetic_results = phonetic_analysis_skill(audio_data)
                 except Exception as e:
                     st.warning(f"Phonetic analysis failed: {str(e)}")
-                    # Clean up temporary file even if analysis failed
-                    if os.path.exists(temp_audio_path):
-                        os.unlink(temp_audio_path)
 
                 # Update progress - Phonetic analysis complete (40%)
                 progress_text.text("✅ Pronunciation analyzed! Calculating speaking rate...")
@@ -626,28 +610,12 @@ def run_demo_app():
             progress_text.text("🎤 Analyzing pronunciation...")
             progress_bar.progress(35)
 
-            # Save audio file temporarily for phonetic analysis
-            import tempfile
-            import os
-            
-            # Create a temporary file for the audio
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-                # Read the audio data from the UploadedFile object
-                audio_bytes = audio_data.read()
-                tmp_file.write(audio_bytes)
-                temp_audio_path = tmp_file.name
-
-            # Run phonetic analysis
+            # Run phonetic analysis directly with audio bytes
             phonetic_results = None
             try:
-                phonetic_results = phonetic_analysis_skill(temp_audio_path)
-                # Clean up temporary file
-                os.unlink(temp_audio_path)
+                phonetic_results = phonetic_analysis_skill(audio_data)
             except Exception as e:
                 st.warning(f"Phonetic analysis failed: {str(e)}")
-                # Clean up temporary file even if analysis failed
-                if os.path.exists(temp_audio_path):
-                    os.unlink(temp_audio_path)
 
             # Update progress - Phonetic analysis complete (40%)
             progress_text.text("✅ Pronunciation analyzed! Calculating speaking rate...")

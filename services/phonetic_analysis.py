@@ -20,27 +20,27 @@ def validate_and_convert_audio(audio_file_path: str) -> str:
         with open(audio_file_path, 'rb') as f:
             audio_data = f.read()
         
-        # Try to read as WAV to check format
-        try:
-            with wave.open(io.BytesIO(audio_data), 'rb') as wav_file:
-                # Check if it's already in the correct format
-                if (wav_file.getnchannels() == 1 and  # mono
-                    wav_file.getsampwidth() == 2 and  # 16-bit
-                    wav_file.getframerate() == 16000):  # 16kHz
-                    return audio_file_path  # Already in correct format
-        except:
-            pass  # Not a valid WAV file, will convert
-        
-        # Create a properly formatted WAV file
+        # Create a properly formatted WAV file using pydub
         import pydub
         from pydub import AudioSegment
         
-        # Load audio (pydub can handle various formats)
+        # Try to load audio from the raw data
         try:
-            audio = AudioSegment.from_file(io.BytesIO(audio_data))
+            # First, try to load as if it's already a WAV file
+            audio = AudioSegment.from_wav(io.BytesIO(audio_data))
         except:
-            # If pydub can't read it, try loading from file path
-            audio = AudioSegment.from_file(audio_file_path)
+            try:
+                # If that fails, try loading as raw audio data
+                # Streamlit audio input might be raw PCM data
+                audio = AudioSegment(
+                    data=audio_data,
+                    sample_width=2,  # 16-bit
+                    frame_rate=16000,  # 16kHz
+                    channels=1  # mono
+                )
+            except:
+                # If that also fails, try loading from file path with format detection
+                audio = AudioSegment.from_file(audio_file_path)
         
         # Convert to proper format: mono, 16kHz, 16-bit
         audio = audio.set_channels(1)  # Convert to mono
@@ -56,7 +56,43 @@ def validate_and_convert_audio(audio_file_path: str) -> str:
         
     except Exception as e:
         print(f"Audio conversion failed: {e}")
-        return audio_file_path  # Return original if conversion fails
+        # If conversion fails, try to create a basic WAV file from the raw data
+        try:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            
+            # Create a simple WAV header for 16kHz, 16-bit, mono
+            import struct
+            
+            # WAV header for 16kHz, 16-bit, mono
+            sample_rate = 16000
+            channels = 1
+            sample_width = 2
+            audio_length = len(audio_data)
+            
+            # Write WAV header
+            temp_file.write(b'RIFF')
+            temp_file.write(struct.pack('<I', 36 + audio_length))
+            temp_file.write(b'WAVE')
+            temp_file.write(b'fmt ')
+            temp_file.write(struct.pack('<I', 16))
+            temp_file.write(struct.pack('<H', 1))  # PCM
+            temp_file.write(struct.pack('<H', channels))
+            temp_file.write(struct.pack('<I', sample_rate))
+            temp_file.write(struct.pack('<I', sample_rate * channels * sample_width))
+            temp_file.write(struct.pack('<H', channels * sample_width))
+            temp_file.write(struct.pack('<H', sample_width * 8))
+            temp_file.write(b'data')
+            temp_file.write(struct.pack('<I', audio_length))
+            
+            # Write audio data
+            temp_file.write(audio_data)
+            temp_file.close()
+            
+            return temp_file.name
+            
+        except Exception as e2:
+            print(f"Fallback WAV creation also failed: {e2}")
+            return audio_file_path  # Return original if all else fails
 
 class PhoneticAnalysisService:
     def __init__(self, language: str = "fr-FR"):
@@ -150,10 +186,72 @@ class PhoneticAnalysisService:
             return 0.0
         return round(sum(w["score"] for w in word_scores) / len(word_scores), 1)
 
-def phonetic_analysis_skill(audio_file_path: str, reference_text: str = "", language: str = "fr-FR") -> Dict[str, Any]:
+    def analyze_pronunciation_from_bytes(self, audio_bytes: bytes, reference_text: str = "") -> Dict[str, Any]:
+        """Analyze pronunciation from audio bytes (from Streamlit audio_input)"""
+        try:
+            # Create a proper WAV file from the audio bytes
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            
+            # Create WAV header for 16kHz, 16-bit, mono
+            import struct
+            
+            sample_rate = 16000
+            channels = 1
+            sample_width = 2
+            audio_length = len(audio_bytes)
+            
+            # Write WAV header
+            temp_file.write(b'RIFF')
+            temp_file.write(struct.pack('<I', 36 + audio_length))
+            temp_file.write(b'WAVE')
+            temp_file.write(b'fmt ')
+            temp_file.write(struct.pack('<I', 16))
+            temp_file.write(struct.pack('<H', 1))  # PCM
+            temp_file.write(struct.pack('<H', channels))
+            temp_file.write(struct.pack('<I', sample_rate))
+            temp_file.write(struct.pack('<I', sample_rate * channels * sample_width))
+            temp_file.write(struct.pack('<H', channels * sample_width))
+            temp_file.write(struct.pack('<H', sample_width * 8))
+            temp_file.write(b'data')
+            temp_file.write(struct.pack('<I', audio_length))
+            
+            # Write audio data
+            temp_file.write(audio_bytes)
+            temp_file.close()
+            
+            # Analyze the created WAV file
+            result = self.analyze_pronunciation(temp_file.name, reference_text)
+            
+            # Clean up temporary file
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
+            
+            return result
+            
+        except Exception as e:
+            return {"success": False, "error": f"Failed to process audio bytes: {str(e)}"}
+
+def phonetic_analysis_skill(audio_input, reference_text: str = "", language: str = "fr-FR") -> Dict[str, Any]:
+    """
+    Analyze pronunciation from audio input (file path or bytes).
+    
+    Args:
+        audio_input: Either a file path (str) or audio bytes (bytes)
+        reference_text: Optional reference text for comparison
+        language: Language code (default: "fr-FR")
+    """
     try:
         service = PhoneticAnalysisService(language=language)
-        result = service.analyze_pronunciation(audio_file_path, reference_text)
+        
+        # Handle different input types
+        if isinstance(audio_input, str):
+            # File path provided
+            result = service.analyze_pronunciation(audio_input, reference_text)
+        else:
+            # Bytes provided (from Streamlit audio_input)
+            result = service.analyze_pronunciation_from_bytes(audio_input, reference_text)
         
         if result["success"]:
             # Create color-coded feedback
