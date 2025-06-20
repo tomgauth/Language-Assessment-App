@@ -35,7 +35,7 @@ def convert_audio_to_wav(audio_data):
         st.error(f"Error converting audio: {str(e)}")
         return None
 
-def call_azure_speech_api(audio_file_path: str, reference_text: str, language: str = "fr-FR"):
+def call_azure_speech_api(audio_file_path: str, reference_text: str, language: str = "en-US"):
     """Call Azure Speech Services for pronunciation assessment"""
     try:
         # DEBUG: Log basic parameters
@@ -59,7 +59,19 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
         st.write(f"  - Speech config created: {speech_config is not None}")
         st.write(f"  - Audio config created: {audio_config is not None}")
         
-        # 3) Set up Pronunciation Assessment
+        # 3) Create speech recognizer with language specification
+        speech_recognizer = speechsdk.SpeechRecognizer(
+            speech_config=speech_config, 
+            language=language, 
+            audio_config=audio_config
+        )
+        
+        # DEBUG: Log recognizer setup
+        st.write("🔍 DEBUG: Recognizer setup:")
+        st.write(f"  - Speech recognizer created: {speech_recognizer is not None}")
+        st.write(f"  - Language set to: {language}")
+        
+        # 4) Set up Pronunciation Assessment
         pronunciation_config = speechsdk.PronunciationAssessmentConfig(
             reference_text=reference_text,
             grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
@@ -67,43 +79,59 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
             enable_miscue=True
         )
         
+        # Enable prosody assessment for en-US
+        if language == "en-US":
+            pronunciation_config.enable_prosody_assessment()
+            st.write("  - Prosody assessment enabled for en-US")
+        
         # DEBUG: Log pronunciation config
         st.write("🔍 DEBUG: Pronunciation configuration:")
         st.write(f"  - Pronunciation config created: {pronunciation_config is not None}")
         st.write(f"  - Reference text set: {reference_text[:50]}...")
+        st.write(f"  - Grading system: HundredMark")
+        st.write(f"  - Granularity: Phoneme")
+        st.write(f"  - Enable miscue: True")
         
-        # 4) Create a recognizer and apply the pronunciation settings
-        recognizer = speechsdk.SpeechRecognizer(speech_config, audio_config)
-        pronunciation_config.apply_to(recognizer)
+        # 5) Apply pronunciation config to recognizer
+        pronunciation_config.apply_to(speech_recognizer)
+        st.write("  - Pronunciation config applied to recognizer")
         
-        # DEBUG: Log recognizer
-        st.write("🔍 DEBUG: Recognizer setup:")
-        st.write(f"  - Recognizer created: {recognizer is not None}")
-        st.write(f"  - Pronunciation config applied: True")
-        
-        # 5) Recognize once and get results
+        # 6) Recognize once and get results
         st.write("🔍 DEBUG: Starting recognition...")
-        result = recognizer.recognize_once()
+        speech_recognition_result = speech_recognizer.recognize_once()
         
         # DEBUG: Log recognition result
         st.write("🔍 DEBUG: Recognition result:")
-        st.write(f"  - Result reason: {result.reason}")
-        st.write(f"  - Result text: {result.text}")
+        st.write(f"  - Result reason: {speech_recognition_result.reason}")
+        st.write(f"  - Result text: {speech_recognition_result.text}")
         
-        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            # Get pronunciation assessment result
-            pa_result = speechsdk.PronunciationAssessmentResult(result)
+        if speech_recognition_result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            # Get pronunciation assessment result as SDK object
+            pronunciation_assessment_result = speechsdk.PronunciationAssessmentResult(speech_recognition_result)
+            
+            # Get pronunciation assessment result as JSON string
+            pronunciation_assessment_result_json = speech_recognition_result.properties.get(
+                speechsdk.PropertyId.SpeechServiceResponse_JsonResult
+            )
             
             # DEBUG: Log pronunciation assessment
-            st.write("�� DEBUG: Pronunciation assessment:")
-            st.write(f"  - Accuracy score: {pa_result.accuracy_score}")
-            st.write(f"  - Fluency score: {pa_result.fluency_score}")
-            st.write(f"  - Completeness score: {pa_result.completeness_score}")
-            st.write(f"  - Pronunciation score: {pa_result.pronunciation_score}")
+            st.write("🔍 DEBUG: Pronunciation assessment:")
+            st.write(f"  - Accuracy score: {pronunciation_assessment_result.accuracy_score}")
+            st.write(f"  - Fluency score: {pronunciation_assessment_result.fluency_score}")
+            st.write(f"  - Completeness score: {pronunciation_assessment_result.completeness_score}")
+            st.write(f"  - Pronunciation score: {pronunciation_assessment_result.pronunciation_score}")
+            
+            # Try to get prosody score if available
+            prosody_score = None
+            try:
+                prosody_score = pronunciation_assessment_result.prosody_score
+                st.write(f"  - Prosody score: {prosody_score}")
+            except:
+                st.write("  - Prosody score: Not available")
             
             # Prepare detailed results
             phoneme_details = []
-            for pd in pa_result.phoneme_details:
+            for pd in pronunciation_assessment_result.phoneme_details:
                 phoneme_details.append({
                     "phoneme": pd.phoneme,
                     "accuracy_score": pd.accuracy_score,
@@ -114,20 +142,22 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
             api_response = {
                 "success": True,
                 "result": {
-                    "overall_score": pa_result.accuracy_score,
-                    "fluency_score": pa_result.fluency_score,
-                    "completeness_score": pa_result.completeness_score,
-                    "pronunciation_score": pa_result.pronunciation_score,
-                    "recognized_text": result.text,
+                    "accuracy_score": pronunciation_assessment_result.accuracy_score,
+                    "fluency_score": pronunciation_assessment_result.fluency_score,
+                    "completeness_score": pronunciation_assessment_result.completeness_score,
+                    "pronunciation_score": pronunciation_assessment_result.pronunciation_score,
+                    "prosody_score": prosody_score,
+                    "recognized_text": speech_recognition_result.text,
                     "reference_text": reference_text,
                     "phoneme_details": phoneme_details,
-                    "word_details": []
+                    "word_details": [],
+                    "raw_json": pronunciation_assessment_result_json
                 }
             }
             
             # Add word-level details if available
-            if hasattr(pa_result, 'word_details'):
-                for wd in pa_result.word_details:
+            if hasattr(pronunciation_assessment_result, 'word_details'):
+                for wd in pronunciation_assessment_result.word_details:
                     api_response["result"]["word_details"].append({
                         "word": wd.word,
                         "accuracy_score": wd.accuracy_score,
@@ -137,8 +167,8 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
             st.write("  - API response prepared successfully")
             return api_response
             
-        elif result.reason == speechsdk.ResultReason.Canceled:
-            cancel = speechsdk.CancellationDetails(result)
+        elif speech_recognition_result.reason == speechsdk.ResultReason.Canceled:
+            cancel = speechsdk.CancellationDetails(speech_recognition_result)
             st.error(f"Recognition canceled: {cancel.reason}")
             if cancel.reason == speechsdk.CancellationReason.Error:
                 st.error(f"Error details: {cancel.error_details}")
@@ -149,10 +179,10 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
                 "error_details": cancel.error_details if cancel.reason == speechsdk.CancellationReason.Error else None
             }
         else:
-            st.error(f"Unexpected result reason: {result.reason}")
+            st.error(f"Unexpected result reason: {speech_recognition_result.reason}")
             return {
                 "success": False,
-                "error": f"Unexpected result reason: {result.reason}"
+                "error": f"Unexpected result reason: {speech_recognition_result.reason}"
             }
             
     except Exception as e:
@@ -179,12 +209,12 @@ def main():
     # Language selection
     language = st.selectbox(
         "Select language:",
-        ["French", "Russian", "English"],
-        format_func=lambda x: "🇫🇷 French" if x == "French" else "🇷🇺 Russian" if x == "Russian" else "🇺🇸 English"
+        ["English", "French", "Russian"],
+        format_func=lambda x: "🇺🇸 English" if x == "English" else "🇫🇷 French" if x == "French" else "🇷🇺 Russian"
     )
     
     # Get language code for Azure API
-    lang_code = "fr-FR" if language == "French" else "ru-RU" if language == "Russian" else "en-US"
+    lang_code = "en-US" if language == "English" else "fr-FR" if language == "French" else "ru-RU"
     
     st.markdown("---")
     
@@ -263,8 +293,8 @@ def main():
                     
                     with col1:
                         st.metric(
-                            label="Overall Score",
-                            value=f"{result.get('overall_score', 0):.1f}/100"
+                            label="Accuracy Score",
+                            value=f"{result.get('accuracy_score', 0):.1f}/100"
                         )
                     
                     with col2:
@@ -283,6 +313,13 @@ def main():
                         st.metric(
                             label="Pronunciation",
                             value=f"{result.get('pronunciation_score', 0):.1f}/100"
+                        )
+                    
+                    # Show prosody score if available
+                    if result.get('prosody_score') is not None:
+                        st.metric(
+                            label="Prosody Score",
+                            value=f"{result['prosody_score']:.1f}/100"
                         )
                     
                     # Show recognized vs reference text
@@ -330,14 +367,14 @@ def main():
                             st.dataframe(df, use_container_width=True)
                     
                     # Overall feedback
-                    overall_score = result.get('overall_score', 0)
+                    accuracy_score = result.get('accuracy_score', 0)
                     st.subheader("💡 Feedback:")
                     
-                    if overall_score >= 80:
+                    if accuracy_score >= 80:
                         st.success("Excellent pronunciation! 🎉")
-                    elif overall_score >= 60:
+                    elif accuracy_score >= 60:
                         st.info("Good pronunciation with room for improvement! 📈")
-                    elif overall_score >= 40:
+                    elif accuracy_score >= 40:
                         st.warning("Fair pronunciation - keep practicing! 💪")
                     else:
                         st.error("Pronunciation needs work - don't give up! 🔄")
