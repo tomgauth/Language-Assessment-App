@@ -35,13 +35,13 @@ def convert_audio_to_wav(audio_data):
         st.error(f"Error converting audio: {str(e)}")
         return None
 
-def call_azure_speech_api(audio_file_path: str, reference_text: str, language: str = "en-US"):
+def call_azure_speech_api(audio_file_path: str, reference_text: str = "", language: str = "en-US"):
     """Call Azure Speech Services for pronunciation assessment"""
     try:
         # DEBUG: Log basic parameters
         st.write("🔍 DEBUG: Azure Speech API parameters:")
         st.write(f"  - Language: {language}")
-        st.write(f"  - Reference text: {reference_text[:100]}{'...' if len(reference_text) > 100 else ''}")
+        st.write(f"  - Reference text: {'(unscripted assessment)' if not reference_text else reference_text[:100]}")
         st.write(f"  - Audio file path: {audio_file_path}")
         st.write(f"  - Azure Key: {AZURE_SPEECH_KEY[:10]}...")
         st.write(f"  - Azure Region: {AZURE_SPEECH_REGION}")
@@ -72,12 +72,24 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
         st.write(f"  - Language set to: {language}")
         
         # 4) Set up Pronunciation Assessment
-        pronunciation_config = speechsdk.PronunciationAssessmentConfig(
-            reference_text=reference_text,
-            grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
-            granularity=speechsdk.PronunciationAssessmentGranularity.Phoneme,
-            enable_miscue=True
-        )
+        if reference_text:
+            # Scripted assessment (with reference text)
+            pronunciation_config = speechsdk.PronunciationAssessmentConfig(
+                reference_text=reference_text,
+                grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
+                granularity=speechsdk.PronunciationAssessmentGranularity.Phoneme,
+                enable_miscue=True
+            )
+            st.write("  - Assessment type: Scripted (with reference text)")
+        else:
+            # Unscripted assessment (no reference text)
+            pronunciation_config = speechsdk.PronunciationAssessmentConfig(
+                reference_text="",
+                grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
+                granularity=speechsdk.PronunciationAssessmentGranularity.Phoneme,
+                enable_miscue=False
+            )
+            st.write("  - Assessment type: Unscripted (free speech)")
         
         # Enable prosody assessment for en-US
         if language == "en-US":
@@ -87,10 +99,9 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
         # DEBUG: Log pronunciation config
         st.write("🔍 DEBUG: Pronunciation configuration:")
         st.write(f"  - Pronunciation config created: {pronunciation_config is not None}")
-        st.write(f"  - Reference text set: {reference_text[:50]}...")
         st.write(f"  - Grading system: HundredMark")
         st.write(f"  - Granularity: Phoneme")
-        st.write(f"  - Enable miscue: True")
+        st.write(f"  - Enable miscue: {reference_text != ''}")
         
         # 5) Apply pronunciation config to recognizer
         pronunciation_config.apply_to(speech_recognizer)
@@ -216,8 +227,8 @@ def main():
         layout="centered"
     )
     
-    st.title("🎤 Pronunciation Evaluator")
-    st.markdown("**Simple pronunciation assessment using Microsoft Azure Speech Services**")
+    st.title("🎤 Free Speech Pronunciation Evaluator")
+    st.markdown("**Simple pronunciation assessment using Microsoft Azure Speech Services - Just speak naturally!**")
     
     # Language selection
     language = st.selectbox(
@@ -231,29 +242,14 @@ def main():
     
     st.markdown("---")
     
-    # Text input for paragraph
-    st.subheader("📝 Enter the text to read:")
-    paragraph = st.text_area(
-        "Paragraph text:",
-        height=200,
-        placeholder="Enter the text you want to read for pronunciation assessment...",
-        help="Type or paste the text you want to read aloud"
-    )
-    
-    if not paragraph.strip():
-        st.warning("Please enter some text to read.")
-        return
-    
-    st.markdown("---")
-    
     # Audio recording
     st.subheader("🎤 Record your pronunciation:")
-    st.info("💡 **Recording Tips:** Speak clearly and naturally. Read the text exactly as written.")
+    st.info("💡 **Recording Tips:** Speak naturally in your chosen language. You can say anything - introduce yourself, describe your day, or just talk about any topic. The AI will assess your pronunciation, fluency, and overall speaking quality.")
     
     audio_data = st.audio_input(
         label="Click to record your pronunciation",
         key="pronunciation_recorder",
-        help="Record yourself reading the text above"
+        help="Record yourself speaking naturally in your chosen language"
     )
     
     if audio_data is not None:
@@ -271,7 +267,7 @@ def main():
                 # Call Azure Speech API
                 api_response = call_azure_speech_api(
                     audio_file_path=audio_file_path,
-                    reference_text=paragraph,
+                    reference_text="",
                     language=lang_code
                 )
                 
@@ -291,11 +287,7 @@ def main():
                 # Display results
                 st.success("✅ Assessment complete!")
                 
-                # Show results as JSON
-                st.subheader("📊 Assessment Results:")
-                st.json(api_response)
-                
-                # Show detailed summary
+                # Show detailed summary FIRST (above debugging)
                 if 'result' in api_response:
                     result = api_response['result']
                     
@@ -335,49 +327,9 @@ def main():
                             value=f"{result['prosody_score']:.1f}/100"
                         )
                     
-                    # Show recognized vs reference text
-                    st.subheader("📝 Text Comparison:")
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("**Reference Text:**")
-                        st.write(result.get('reference_text', ''))
-                    
-                    with col2:
-                        st.markdown("**Recognized Text:**")
-                        st.write(result.get('recognized_text', ''))
-                    
-                    # Show phoneme details if available
-                    if result.get('phoneme_details'):
-                        st.subheader("🔤 Phoneme Details:")
-                        phoneme_data = []
-                        for pd in result['phoneme_details']:
-                            phoneme_data.append({
-                                "Phoneme": pd['phoneme'],
-                                "Accuracy": f"{pd['accuracy_score']:.1f}",
-                                "Error Type": pd.get('error_type', 'None')
-                            })
-                        
-                        if phoneme_data:
-                            import pandas as pd
-                            df = pd.DataFrame(phoneme_data)
-                            st.dataframe(df, use_container_width=True)
-                    
-                    # Show word details if available
-                    if result.get('word_details'):
-                        st.subheader("📚 Word Details:")
-                        word_data = []
-                        for wd in result['word_details']:
-                            word_data.append({
-                                "Word": wd['word'],
-                                "Accuracy": f"{wd['accuracy_score']:.1f}",
-                                "Error Type": wd.get('error_type', 'None')
-                            })
-                        
-                        if word_data:
-                            import pandas as pd
-                            df = pd.DataFrame(word_data)
-                            st.dataframe(df, use_container_width=True)
+                    # Show recognized text
+                    st.subheader("📝 Recognized Text:")
+                    st.write(result.get('recognized_text', ''))
                     
                     # Overall feedback
                     accuracy_score = result.get('accuracy_score', 0)
@@ -391,6 +343,10 @@ def main():
                         st.warning("Fair pronunciation - keep practicing! 💪")
                     else:
                         st.error("Pronunciation needs work - don't give up! 🔄")
+                
+                # Show results as JSON (debugging info)
+                st.subheader("📊 Assessment Results (Debug):")
+                st.json(api_response)
 
 if __name__ == "__main__":
     main()
