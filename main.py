@@ -7,6 +7,7 @@ from codaio import Coda, Document, Table, Cell
 import pandas as pd
 from services.transcription import transcribe_audio, get_audio_duration
 from services.dynamic_skills_analysis import dynamic_skills_analysis
+from services.phonetic_analysis import phonetic_analysis_skill
 from frontend_elements import CircularProgress, get_color
 from services.nlp_analysis import analyze_lemmas_and_frequency
 from services.learning_plan import analyze_user_progress, format_progress_data
@@ -240,9 +241,38 @@ def run_main_app():
                     st.error("Failed to transcribe or get audio duration")
                     return
 
-                # Update progress - Starting WPM analysis (40%)
-                progress_text.text("📊 Calculating speaking rate and vocabulary...")
+                # Update progress - Starting phonetic analysis (35%)
+                progress_text.text("🎤 Analyzing pronunciation...")
+                progress_bar.progress(35)
+
+                # Save audio file temporarily for phonetic analysis
+                import tempfile
+                import os
+                
+                # Create a temporary file for the audio
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                    tmp_file.write(audio_data)
+                    temp_audio_path = tmp_file.name
+
+                # Run phonetic analysis
+                phonetic_results = None
+                try:
+                    phonetic_results = phonetic_analysis_skill(temp_audio_path)
+                    # Clean up temporary file
+                    os.unlink(temp_audio_path)
+                except Exception as e:
+                    st.warning(f"Phonetic analysis failed: {str(e)}")
+                    # Clean up temporary file even if analysis failed
+                    if os.path.exists(temp_audio_path):
+                        os.unlink(temp_audio_path)
+
+                # Update progress - Phonetic analysis complete (40%)
+                progress_text.text("✅ Pronunciation analyzed! Calculating speaking rate...")
                 progress_bar.progress(40)
+
+                # Update progress - Starting WPM analysis (45%)
+                progress_text.text("📊 Calculating speaking rate and vocabulary...")
+                progress_bar.progress(45)
 
                 # Calculate WPM                
                 analysis_results = analyze_lemmas_and_frequency(transcription, duration)
@@ -311,6 +341,14 @@ def run_main_app():
                         context=prompt_row['prompt_context'],
                         openai_api_key=openai_api_key
                     )
+
+                # Add phonetic analysis results if available
+                if phonetic_results:
+                    skills_analysis_results.append({
+                        'skill': 'Pronunciation',
+                        'score': phonetic_results['overall_score'],
+                        'feedback': phonetic_results['formatted_feedback']
+                    })
 
                 # DEBUG: Log raw feedback and extracted score for each skill
                 # if skills_list:
@@ -581,8 +619,39 @@ def run_demo_app():
             else:
                 st.error("Failed to transcribe or get audio duration")
                 return
-            progress_text.text("📊 Calculating speaking rate and vocabulary...")
+
+            # Update progress - Starting phonetic analysis (35%)
+            progress_text.text("🎤 Analyzing pronunciation...")
+            progress_bar.progress(35)
+
+            # Save audio file temporarily for phonetic analysis
+            import tempfile
+            import os
+            
+            # Create a temporary file for the audio
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                tmp_file.write(audio_data)
+                temp_audio_path = tmp_file.name
+
+            # Run phonetic analysis
+            phonetic_results = None
+            try:
+                phonetic_results = phonetic_analysis_skill(temp_audio_path)
+                # Clean up temporary file
+                os.unlink(temp_audio_path)
+            except Exception as e:
+                st.warning(f"Phonetic analysis failed: {str(e)}")
+                # Clean up temporary file even if analysis failed
+                if os.path.exists(temp_audio_path):
+                    os.unlink(temp_audio_path)
+
+            # Update progress - Phonetic analysis complete (40%)
+            progress_text.text("✅ Pronunciation analyzed! Calculating speaking rate...")
             progress_bar.progress(40)
+
+            progress_text.text("📊 Calculating speaking rate and vocabulary...")
+            progress_bar.progress(45)
+
             analysis_results = analyze_lemmas_and_frequency(transcription, duration)
             wpm = analysis_results['wpm']
             wpm_score = min(round(wpm), 100)
@@ -607,7 +676,7 @@ def run_demo_app():
             comprehension_prompt = {
                 'skill_name': 'comprehension',
                 'skill_ai_prompt': """
-You are a language evaluation assistant. Your task is to assess how well a student’s answer fits the question they were asked. This is about comprehension and contextual appropriateness, not grammar or vocabulary.
+You are a language evaluation assistant. Your task is to assess how well a student's answer fits the question they were asked. This is about comprehension and contextual appropriateness, not grammar or vocabulary.
 
 Use the scale below to assign a score out of 100 based on how directly and appropriately the student responds to the question. This is not meant to be harsh — if the learner understood the question and gave a sensible response, the score should reflect that.
 
@@ -623,11 +692,10 @@ A: I grew up in a small town in Italy. ✅
 The answer fits the general theme, but something is slightly off, missing, or vague.
 Example:
 Q: Where are you from?
-A: I’m currently living in France, but I’ve moved a lot. 🟡
-→ Not a bad answer, but not exactly the info asked.
+A: I'm currently living in France, but I've moved a lot. → Not a bad answer, but not exactly the info asked.
 
 74–50 points → Somewhat Related
-The student didn’t fully understand the question but said something that keeps the conversation going.
+The student didn't fully understand the question but said something that keeps the conversation going.
 Example:
 Q: Where are you from?
 A: I work in marketing and I travel a lot. 🔄
@@ -640,7 +708,7 @@ Q: Where are you from?
 A: I like to cook pasta on Sundays. ❌
 
 24–0 points → Completely Off or Incoherent
-The student clearly didn’t understand the question and the response is not connected at all.
+The student clearly didn't understand the question and the response is not connected at all.
 
 🎯 Format your answer like this:
 
@@ -664,6 +732,15 @@ Explain briefly why the score was given. Was the student off-topic? Did they mis
                     context=prompt_row.get('prompt_context', ''),
                     openai_api_key=openai_api_key
                 )
+
+            # Add phonetic analysis results if available
+            if phonetic_results:
+                skills_analysis_results.append({
+                    'skill': 'Pronunciation',
+                    'score': phonetic_results['overall_score'],
+                    'feedback': phonetic_results['formatted_feedback']
+                })
+
             progress_text.text("💾 Saving your results...")
             progress_bar.progress(80)
             st.write("## Analysis Scores")
