@@ -131,12 +131,19 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
             
             # Prepare detailed results
             phoneme_details = []
-            for pd in pronunciation_assessment_result.phoneme_details:
-                phoneme_details.append({
-                    "phoneme": pd.phoneme,
-                    "accuracy_score": pd.accuracy_score,
-                    "error_type": pd.error_type
-                })
+            try:
+                if hasattr(pronunciation_assessment_result, 'phoneme_details'):
+                    for pd in pronunciation_assessment_result.phoneme_details:
+                        phoneme_details.append({
+                            "phoneme": pd.phoneme,
+                            "accuracy_score": pd.accuracy_score,
+                            "error_type": pd.error_type
+                        })
+                    st.write(f"  - Phoneme details: {len(phoneme_details)} phonemes found")
+                else:
+                    st.write("  - Phoneme details: Not available in this SDK version")
+            except Exception as phoneme_error:
+                st.write(f"  - Phoneme details error: {phoneme_error}")
             
             # Create comprehensive result structure
             api_response = {
@@ -156,13 +163,19 @@ def call_azure_speech_api(audio_file_path: str, reference_text: str, language: s
             }
             
             # Add word-level details if available
-            if hasattr(pronunciation_assessment_result, 'word_details'):
-                for wd in pronunciation_assessment_result.word_details:
-                    api_response["result"]["word_details"].append({
-                        "word": wd.word,
-                        "accuracy_score": wd.accuracy_score,
-                        "error_type": wd.error_type
-                    })
+            try:
+                if hasattr(pronunciation_assessment_result, 'word_details'):
+                    for wd in pronunciation_assessment_result.word_details:
+                        api_response["result"]["word_details"].append({
+                            "word": wd.word,
+                            "accuracy_score": wd.accuracy_score,
+                            "error_type": wd.error_type
+                        })
+                    st.write(f"  - Word details: {len(api_response['result']['word_details'])} words found")
+                else:
+                    st.write("  - Word details: Not available in this SDK version")
+            except Exception as word_error:
+                st.write(f"  - Word details error: {word_error}")
             
             st.write("  - API response prepared successfully")
             return api_response
