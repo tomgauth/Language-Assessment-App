@@ -1218,6 +1218,99 @@ def run_learning_plan_app():
                 help="Expected fluency by program end"
             )
 
+        # Conversation Goals Section
+        st.subheader("🗣️ Conversation Goals & Learning Phases")
+        
+        # Display conversations in 3 columns
+        if formatted_plan['content'].get('conversations'):
+            conversations = formatted_plan['content']['conversations']
+            
+            # Create 3 columns for conversations
+            col1, col2, col3 = st.columns(3)
+            
+            # First conversation (30-day phase)
+            with col1:
+                if len(conversations) > 0:
+                    conv = conversations[0]
+                    st.markdown("""
+                    <div style="
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        padding: 20px;
+                        border-radius: 15px;
+                        color: white;
+                        margin-bottom: 20px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    ">
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown(f"### 🎯 {conv['type']}")
+                    st.markdown(f"**{conv['title']}**")
+                    
+                    if conv['goals']:
+                        goals_list = conv['goals'].split('*')
+                        for goal in goals_list:
+                            goal = goal.strip()
+                            if goal:
+                                st.markdown(f"• {goal}")
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Second conversation (60-day phase)
+            with col2:
+                if len(conversations) > 1:
+                    conv = conversations[1]
+                    st.markdown("""
+                    <div style="
+                        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                        padding: 20px;
+                        border-radius: 15px;
+                        color: white;
+                        margin-bottom: 20px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    ">
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown(f"### 🚀 {conv['type']}")
+                    st.markdown(f"**{conv['title']}**")
+                    
+                    if conv['goals']:
+                        goals_list = conv['goals'].split('*')
+                        for goal in goals_list:
+                            goal = goal.strip()
+                            if goal:
+                                st.markdown(f"• {goal}")
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Third conversation (90-day program)
+            with col3:
+                if len(conversations) > 2:
+                    conv = conversations[2]
+                    st.markdown("""
+                    <div style="
+                        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+                        padding: 20px;
+                        border-radius: 15px;
+                        color: white;
+                        margin-bottom: 20px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    ">
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown(f"### 🏆 {conv['type']}")
+                    st.markdown(f"**{conv['title']}**")
+                    
+                    if conv['goals']:
+                        goals_list = conv['goals'].split('*')
+                        for goal in goals_list:
+                            goal = goal.strip()
+                            if goal:
+                                st.markdown(f"• {goal}")
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("No conversation goals defined for this learning plan.")
+
         # Methodology Comparison Charts
         st.subheader("📊 Our Methodology vs Traditional Methods")
         
